@@ -1,0 +1,2038 @@
+# CRYPTO SWARM — RESTRUCTURED MASTER PLAN v6.0
+
+## Architecture · Prompts · Implementation · Efficiency Recommendations
+
+### Integrated from v1–v5 Research + All Suggestions Applied
+
+### March 2026
+
+-----
+
+> **Single sentence mission:** Build the smallest possible system that autonomously finds, validates, deploys, and evolves profitable trading strategies — then expand only after the core loop works.
+
+-----
+
+## WHY THIS RESTRUCTURE EXISTS
+
+The v5 architecture was technically correct but operationally backwards. It designed all 5 swarms simultaneously before proving any single loop works. This document applies one core lesson from the suggestions:
+
+**Build a vertical slice first. Prove it. Then expand horizontally.**
+
+Every efficiency recommendation in this document comes from one of three sources:
+
+- What the v1–v5 research actually found (vs what sounded good in theory)
+- The three new tools: Mission Control, Camoufox, Mem0+Graphiti memory stack
+- Hard-won quant lessons about what kills personal algo trading systems
+
+-----
+
+## TABLE OF CONTENTS
+
+1. [Efficiency Principles — Applied](#1-efficiency-principles)
+1. [What Gets Cut, What Gets Kept](#2-what-gets-cut-what-gets-kept)
+1. [Final Stack — One Table](#3-final-stack)
+1. [System Architecture](#4-system-architecture)
+1. [Infrastructure — Docker Compose](#5-infrastructure)
+1. [Memory Architecture — Mem0 + Graphiti + Letta](#6-memory-architecture)
+1. [Skill Hub Manifest](#7-skill-hub-manifest)
+1. [Vertical Slice — Build This First](#8-vertical-slice-mvs)
+1. [Research Swarm — All Agent Prompts](#9-research-swarm)
+1. [Backtest Swarm — All Agent Prompts](#10-backtest-swarm)
+1. [Execution Swarm — All Agent Prompts](#11-execution-swarm)
+1. [Evolution Swarm — All Agent Prompts](#12-evolution-swarm)
+1. [Mission Control Setup](#13-mission-control)
+1. [Phased Roadmap — Efficiency-First](#14-phased-roadmap)
+1. [Risk Framework](#15-risk-framework)
+1. [Decision Log — Every Major Call Explained](#16-decision-log)
+
+-----
+
+## 1. EFFICIENCY PRINCIPLES
+
+These are not aspirational. Every architectural decision below must pass all five.
+
+### Principle 1 — Prove the Loop Before Adding Agents
+
+One signal source → one backtest engine → one exchange → one strategy type.
+Get that pipeline generating paper-traded P&L before adding a second agent anywhere.
+**Violation signal:** You’re writing a new agent before the previous one has produced a backtest result.
+
+### Principle 2 — Don’t Build What Exists
+
+Three things you were going to build from scratch that now don’t need building:
+
+- Mission Control dashboard (builderz-labs built it, MIT license, 28 panels)
+- Memory extraction logic (Mem0 does this in 3 lines, Netflix uses it in production)
+- Stealth browsing (Camoufox patches Firefox at C++ level — you can’t build this)
+
+**Violation signal:** You write >50 lines of code for something with a maintained open-source equivalent.
+
+### Principle 3 — Fail Fast on Strategies, Not on Infrastructure
+
+The 5-gate validation funnel exists to kill bad strategies before they touch capital.
+Most strategies will fail Gate 2 (fast screen). This is correct behavior.
+The system should make running a new backtest take <5 minutes of human effort.
+**Violation signal:** A new strategy hypothesis takes >1 day to get to backtest results.
+
+### Principle 4 — Local LLM First, Always
+
+Qwen3.5 4B on SGLang should handle 80%+ of inference.
+If a task “needs” Claude Sonnet, ask whether it actually needs it or whether you’re being lazy about prompting.
+Set a hard $10/day LLM budget enforced by Paperclip from Day 1.
+**Violation signal:** Daily LLM costs consistently exceed $5 before you have live strategies.
+
+### Principle 5 — Evolution Swarm Is Month 8+
+
+The genetic optimizer needs real P&L data to produce meaningful signal.
+Running DEAP on 2 strategies with 30 days of paper trades produces noise, not insight.
+Build the infrastructure in Phase 4, activate it seriously in month 8–12.
+**Violation signal:** You’re tuning the genetic optimizer parameters before you have 10+ live strategies.
+
+-----
+
+## 2. WHAT GETS CUT, WHAT GETS KEPT
+
+### CUT — Remove These From Phase 1–3
+
+|Cut                   |Reason                                                                          |When to Add Back                             |
+|----------------------|--------------------------------------------------------------------------------|---------------------------------------------|
+|Polymarket Agent      |Alpha overstated for personal scale; edge is mostly arbitraged away             |Phase 4 if you want a macro signal modifier  |
+|Full Letta integration|Too complex before you have baseline portfolio; Evolution needs real data first |Month 8+ alongside serious DEAP work         |
+|MemU + MemoryOS       |Solves a personalization problem, not a trading problem                         |Never — wrong fit                            |
+|hftbacktest           |Market-making at L2 tick level requires colocation infrastructure you don’t have|Only if going into MM strategies specifically|
+|Aster deposit skill   |Capital management autonomy before you trust the system is high risk            |After 6 months live trading                  |
+|OKX DApp skill        |Smart contract direct interaction requires audit-level security review first    |After security review                        |
+|FinRL RL strategies   |RL requires enormous amounts of training data + compute; prone to overfitting   |Phase 4 as one research track, not primary   |
+
+### KEEP — Non-Negotiable
+
+|Keep                                  |Why Non-Negotiable                                                     |
+|--------------------------------------|-----------------------------------------------------------------------|
+|All 3 official skill hubs (20 skills) |Free, battle-tested, security-reviewed — zero reason to skip           |
+|5-gate validation (+ sensitivity gate)|The gates are the system. Compromising them is how you lose capital    |
+|Mem0 + Graphiti                       |Replaces hundreds of lines of manual Neo4j Cypher — 3-line installation|
+|Mission Control                       |Replaces weeks of custom dashboard work — fork and add 3 panels        |
+|Camoufox (coryking fork)              |Research agents will get blocked by Cloudflare without it              |
+|Dead Man’s Switch heartbeat           |24/7 autonomous execution without this is reckless                     |
+|Dual slippage testing                 |Strategies that only work at 0.1% slippage won’t survive live          |
+|CONFIRM gate on all execution         |No exceptions, ever                                                    |
+|Agent wallet isolation                |Never put main wallet key in agent config                              |
+|LLM cost tracking from Day 1          |Without this you’ll discover a $300 Claude bill in month 2             |
+
+### SIMPLIFIED — Reduced Complexity
+
+|Original Plan                                                                        |Simplified Version                                             |Efficiency Gain                  |
+|-------------------------------------------------------------------------------------|---------------------------------------------------------------|---------------------------------|
+|Paperclip + custom org chart                                                         |Paperclip default config + Mission Control for visibility      |2 weeks saved                    |
+|Custom Neo4j Cypher for all memory                                                   |Mem0.add() / Mem0.search() + Graphiti episodes                 |~400 lines removed               |
+|6 agent orchestrators (swarms + DeerFlow + AgentScope + Paperclip + OpenFang + CoPaw)|swarms (master DAG) + DeerFlow (research only) + CoPaw (mobile)|3 frameworks removed from Phase 1|
+|5 backtesting engines simultaneously                                                 |Jesse primary, VectorBT fast screen, others Phase 3+           |Complexity halved                |
+|LangGraph for Literature Agent                                                       |DeerFlow handles this — same pattern, no extra framework       |1 framework removed              |
+|Custom Next.js dashboard                                                             |Fork Mission Control + add 3 crypto panels                     |3 weeks saved                    |
+
+-----
+
+## 3. FINAL STACK — ONE TABLE
+
+```
+CATEGORY          TOOL                          PURPOSE
+─────────────────────────────────────────────────────────────────────────
+ORCHESTRATION
+  Master DAG      kyegomez/swarms               Agent registry, parallel execution, MCP
+  Research exec   bytedance/DeerFlow v2         SuperAgent harness for research pipeline
+  Mobile          agentscope-ai/CoPaw           Telegram interface + CONFIRM gate
+  Governance      paperclipai/paperclip         Budget caps, approval gates, audit log
+  Dashboard       builderz-labs/mission-control 28 panels, agent lifecycle, cost tracking
+
+EXCHANGE SKILLS (official, MIT-licensed)
+  CEX data+exec   binance/binance-skills-hub    7 skills: spot, smart money, meme, risk
+  Perp DEX        asterdex/aster-skills-hub     8 skills: auth v1+v3, trading, WebSocket
+  DEX+cross-chain okx/onchainos-skills          5 modules: wallet, trades, markets
+  HL perps        edkdev/hyperliquid-mcp        Bracket orders, 200k OPS, testnet
+
+STRATEGY
+  Backtest fast   VectorBT                      Gate 2: 1000-param sweeps in <30s
+  Backtest deep   Jesse                         Gates 3-4: walk-forward, accurate fills
+  Strategy code   Pydantic-AI-Pinescript-Expert Pine Script RAG with pgvector
+  Validation MCP  mcp-server-pinescript         Syntax + logic validation
+
+DATA
+  Time-series     TimescaleDB                   OHLCV, trades, signals, costs
+  Message bus     Redis Streams                 Agent-to-agent (never direct calls)
+  Fast memory     Mem0 + Qdrant                 Working memory, auto fact extraction
+  Temporal graph  Graphiti + Neo4j              How knowledge changes over time
+  Local LLM       SGLang + Qwen3.5 4B Vision    80%+ of inference, zero cost
+
+RESEARCH
+  Stealth browser Camoufox (coryking fork)      Anti-bot research (Cloudflare defeated)
+  Simple scraping vercel-labs/agent-browser     Public pages without anti-bot
+  Local search    Perplexica (Qwen3.5)          Free bulk research
+  Scheduled async Perplexity Computer           Daily brief, regulatory monitoring
+  Sentiment NLP   FinGPT (HuggingFace local)   Crypto-tuned news analysis
+
+EVOLUTION (Phase 4+)
+  Genetic optim   DEAP                          Nightly parameter evolution
+  Agent autonomy  Letta/MemGPT                  Evolution agents decide what to remember
+
+OBSERVABILITY
+  eBPF tracing    deepflowio/deepflow           Zero-code distributed tracing
+  LLM tracing     LangSmith                     Every LLM call traced + costed
+  Agent audit     Mission Control audit log     Immutable agent action history
+```
+
+### LLM Routing (with cost discipline)
+
+```python
+# Route to the cheapest model that can do the job correctly
+
+ROUTING = {
+    # LOCAL — zero cost. Use aggressively.
+    "sentiment_score":     "qwen3.5-4b-local",
+    "code_first_draft":    "qwen3.5-4b-local",
+    "data_extraction":     "qwen3.5-4b-local",
+    "pattern_match":       "qwen3.5-4b-local",
+    "simple_qa":           "qwen3.5-4b-local",
+    "news_analysis":       "fingpt-local",       # domain-tuned, free
+
+    # OPENROUTER — GLM-5 $0.80/M, lowest hallucination rate
+    # Use for: anything where fabricated numbers would cause harm
+    "strategy_review":     "glm-5-openrouter",
+    "risk_check":          "glm-5-openrouter",
+    "code_final_review":   "glm-5-openrouter",
+
+    # CLAUDE SONNET — ~$9/M. Expensive. Earn it.
+    # Only for: novel reasoning that local models demonstrably fail at
+    "novel_hypothesis":    "claude-sonnet-4-6",
+    "system_improvement":  "claude-sonnet-4-6",
+
+    # PERPLEXITY COMPUTER — $200/mo flat, async
+    "daily_brief":         "perplexity-computer",
+    "reg_monitoring":      "perplexity-computer",
+}
+
+DAILY_LLM_BUDGET = 10.00   # USD, hard cap in Paperclip from Day 1
+ALERT_THRESHOLD  = 7.00    # Alert at 70% of budget
+```
+
+-----
+
+## 4. SYSTEM ARCHITECTURE
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│  INTERFACE LAYER                                                    │
+│  Mission Control (3000)  ·  CoPaw Telegram  ·  Perplexity Sched   │
+├────────────────────────────────────────────────────────────────────┤
+│  GOVERNANCE LAYER                                                   │
+│  Paperclip — budget cap $10/day · CONFIRM gate · audit log         │
+│  Dead Man's Switch — heartbeat every 60s, halt at 10min silence    │
+├──────────────┬──────────────┬──────────────┬───────────────────────┤
+│  RESEARCH    │  BACKTEST    │  EXECUTION   │  EVOLUTION (Ph4+)     │
+│              │              │              │                        │
+│  DeerFlow v2 │  Sensitivity │  Signal Agg  │  DEAP nightly         │
+│  ──────────  │  Fast Screen │  Router      │  Regime Detector      │
+│  Scanner     │  Walk-Fwd    │  ──────────  │  Perf Analyst         │
+│  Sentiment   │  Monte Carlo │  Binance     │  Memory Distiller     │
+│  Alpha Mine  │  Regime Test │  HL perps    │  Letta (autonomy)     │
+│  OnChain     │  Correlation │  Aster DEX   │                       │
+│  Literature  │              │  OKX DEX     │                       │
+│  (Ph2+)      │              │  Risk Mon    │                       │
+├──────────────┴──────────────┴──────────────┴───────────────────────┤
+│  SKILL HUB LAYER                                                    │
+│  Binance (7) · Aster (8) · OKX (5) · Hyperliquid MCP              │
+│  Pine Script MCP · Camoufox REST · Polymarket (Ph4)                │
+├────────────────────────────────────────────────────────────────────┤
+│  MEMORY LAYER                                                       │
+│  Mem0+Qdrant (fast) · Graphiti+Neo4j (temporal) · Letta (Ph4+)    │
+├────────────────────────────────────────────────────────────────────┤
+│  DATA LAYER                                                         │
+│  TimescaleDB · Redis Streams · CCXT · DeFiLlama · FinNLP           │
+│  Camoufox sessions · SGLang Qwen3.5 · agent-browser                │
+├────────────────────────────────────────────────────────────────────┤
+│  OBSERVABILITY                                                      │
+│  DeepFlow eBPF · LangSmith · Mission Control logs · Paperclip      │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Signal Flow — Every Step
+
+```
+STEP 1  DETECT
+        Market Scanner runs every 15 min
+        → Publishes signal to redis:research:signals
+        → Mem0.add(signal_summary, user_id="market_scanner")
+
+STEP 2  QUALIFY
+        Signal Aggregator scores sources by reliability
+        → Confidence >= 0.65 AND signal_age < 30min → enter backtest queue
+        → Below threshold → log and discard
+
+STEP 3  CODE
+        Strategy Coder translates hypothesis → Jesse code
+        → Pine Script MCP validates logic (not syntax — logic)
+        → First draft: Qwen3.5 4B local
+        → Final review: GLM-5
+
+STEP 4  VALIDATE (6 gates, fail-fast ordered)
+        Gate 1 Syntax          → reject malformed code immediately
+        Gate 2 Sensitivity     → ±10% param perturbation, Sharpe must stay >0.7
+        Gate 3 Fast Screen     → VectorBT 1000-combo sweep, dual slippage
+        Gate 4 Walk-Forward    → Jesse WFE >= 0.6 across 4 folds
+        Gate 5 Regime Test     → profitable in >= 2 of 4 regimes
+        Gate 6 Correlation     → Pearson < 0.4 with any existing strategy
+        → All pass → enter 30-day paper trading
+
+STEP 5  OBSERVE
+        Paper trading for 30 days minimum
+        → Performance Analyst logs nightly via Mission Control
+        → Human reviews weekly in Mission Control dashboard
+
+STEP 6  PROMOTE
+        Human types CONFIRM in Mission Control or CoPaw
+        → Allocation: $500–$1000 initial (never more than this on first live)
+
+STEP 7  EXECUTE
+        Smart Router selects exchange (size, MEV risk, asset type)
+        → Paperclip checks budget cap
+        → Dead Man's Switch confirms Risk Monitor heartbeat
+        → CONFIRM gate (user types CONFIRM via CoPaw)
+        → Order via exchange skill
+        → Log to TimescaleDB + Mission Control
+
+STEP 8  EVOLVE (Phase 4+)
+        Nightly DEAP: mutate parameters of live strategies
+        → Graphiti: update strategy-regime knowledge graph
+        → Mem0: extract new performance facts automatically
+        → 90-day Sharpe < 0.5 → auto-retire, archive in Neo4j
+```
+
+-----
+
+## 5. INFRASTRUCTURE
+
+### Docker Compose
+
+```yaml
+version: "3.9"
+
+services:
+  # ── DATABASES ─────────────────────────────────────────────────
+  timescaledb:
+    image: timescale/timescaledb-ha:pg16-latest
+    environment:
+      POSTGRES_DB:       swarm_db
+      POSTGRES_USER:     swarm
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./data/schemas:/docker-entrypoint-initdb.d
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports: ["6379:6379"]
+
+  qdrant:                              # Mem0 vector store
+    image: qdrant/qdrant:latest
+    volumes: [qdrant_data:/qdrant/storage]
+    ports: ["6333:6333"]
+
+  neo4j:                               # Graphiti temporal graph backend
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH:    neo4j/${NEO4J_PASSWORD}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+    ports: ["7474:7474", "7687:7687"]
+    volumes: [neo4j_data:/data]
+
+  # ── LOCAL LLM ─────────────────────────────────────────────────
+  sglang:
+    image: lmsysorg/sglang:latest
+    runtime: nvidia
+    command: >
+      python -m sglang.launch_server
+        --model-path Qwen/Qwen2.5-VL-7B-Instruct
+        --port 30000 --mem-fraction-static 0.88
+    ports: ["30000:30000"]
+    volumes: [~/.cache/huggingface:/root/.cache/huggingface]
+
+  # ── CAMOUFOX REST SERVER ───────────────────────────────────────
+  camoufox:
+    image: redf0x1/camoufox-server:latest
+    environment:
+      MAX_SESSIONS: 20
+      DEFAULT_GEO:  auto
+    ports: ["8080:8080"]
+    networks: [research_net]     # ISOLATED — execution agents cannot reach this
+
+  # ── SWARM CORE ────────────────────────────────────────────────
+  swarm-api:
+    build: ./agents
+    env_file: .env
+    environment:
+      REDIS_URL:     redis://redis:6379
+      DB_URL:        postgresql://swarm:${DB_PASSWORD}@timescaledb:5432/swarm_db
+      NEO4J_URL:     bolt://neo4j:7687
+      QDRANT_URL:    http://qdrant:6333
+      SGLANG_URL:    http://sglang:30000
+      CAMOUFOX_URL:  http://camoufox:8080
+    depends_on: [redis, timescaledb, neo4j, qdrant, sglang]
+    ports: ["8000:8000"]
+    networks: [research_net, execution_net]
+
+  # ── MISSION CONTROL (replaces custom dashboard) ──────────────
+  mission-control:
+    build: ./mission-control
+    environment:
+      AUTH_USER:   ${MC_USER}
+      AUTH_PASS:   ${MC_PASS}
+      API_KEY:     ${MC_API_KEY}
+      SWARM_API:   http://swarm-api:8000
+    ports: ["3000:3000"]
+    # Uses its own SQLite — zero extra dependencies
+
+  # ── OBSERVABILITY ─────────────────────────────────────────────
+  deepflow-agent:
+    image: deepflowio/deepflow-agent:latest
+    privileged: true
+    network_mode: host
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /proc:/proc:ro
+
+networks:
+  research_net:    # DeerFlow, Camoufox — research only
+  execution_net:   # Execution, risk monitor — isolated from research
+
+volumes:
+  timescale_data:
+  qdrant_data:
+  neo4j_data:
+```
+
+### TimescaleDB Schemas
+
+```sql
+-- OHLCV
+CREATE TABLE candles (
+  time     TIMESTAMPTZ NOT NULL,
+  symbol   TEXT NOT NULL,
+  exchange TEXT NOT NULL,
+  open DOUBLE PRECISION, high DOUBLE PRECISION,
+  low  DOUBLE PRECISION, close DOUBLE PRECISION,
+  volume DOUBLE PRECISION
+);
+SELECT create_hypertable('candles', 'time');
+CREATE INDEX ON candles (symbol, exchange, time DESC);
+
+-- Signals
+CREATE TABLE signals (
+  time        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  agent_name  TEXT NOT NULL,
+  signal_type TEXT NOT NULL,
+  symbol      TEXT,
+  confidence  DOUBLE PRECISION,
+  acted_on    BOOLEAN DEFAULT FALSE,
+  metadata    JSONB
+);
+SELECT create_hypertable('signals', 'time');
+
+-- Trades (paper + live, slippage tracked)
+CREATE TABLE trades (
+  time         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  exchange     TEXT NOT NULL,
+  symbol       TEXT NOT NULL,
+  side         TEXT NOT NULL,
+  size         DOUBLE PRECISION,
+  entry_price  DOUBLE PRECISION,
+  exit_price   DOUBLE PRECISION,
+  realised_pnl DOUBLE PRECISION,
+  strategy_id  TEXT,
+  mode         TEXT NOT NULL DEFAULT 'paper',
+  slippage_bps DOUBLE PRECISION,
+  fees_usd     DOUBLE PRECISION,
+  routing_reason TEXT,
+  metadata     JSONB
+);
+SELECT create_hypertable('trades', 'time');
+
+-- Validation results (every gate logged)
+CREATE TABLE validations (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  time         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  strategy_id  TEXT NOT NULL,
+  gate         TEXT NOT NULL,
+  passed       BOOLEAN,
+  slippage_mode TEXT,          -- 'optimistic' | 'conservative'
+  sharpe       DOUBLE PRECISION,
+  max_drawdown DOUBLE PRECISION,
+  wfe_ratio    DOUBLE PRECISION,
+  sensitivity  DOUBLE PRECISION,
+  full_report  JSONB
+);
+
+-- LLM cost tracking (enforces $10/day discipline)
+CREATE TABLE llm_costs (
+  time       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  agent      TEXT NOT NULL,
+  model      TEXT NOT NULL,
+  tokens_in  INTEGER,
+  tokens_out INTEGER,
+  cost_usd   DOUBLE PRECISION
+);
+SELECT create_hypertable('llm_costs', 'time');
+
+-- Market regime history
+CREATE TABLE regimes (
+  time       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  regime     TEXT NOT NULL,
+  confidence DOUBLE PRECISION,
+  indicators JSONB
+);
+SELECT create_hypertable('regimes', 'time');
+
+-- Risk events + circuit breakers
+CREATE TABLE risk_events (
+  time           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  level          INTEGER NOT NULL,
+  trigger        TEXT NOT NULL,
+  portfolio_heat DOUBLE PRECISION,
+  daily_dd       DOUBLE PRECISION,
+  action_taken   TEXT,
+  resolved_at    TIMESTAMPTZ
+);
+```
+
+-----
+
+## 6. MEMORY ARCHITECTURE
+
+### Layer Assignments
+
+```
+Mem0 + Qdrant       → All research agents (fast working memory)
+Graphiti + Neo4j    → Evolution + Backtest (temporal knowledge graph)
+Letta               → Evolution Swarm only, Phase 4+ (agent autonomy)
+TimescaleDB         → Quantitative data (never LLM-managed — raw numbers)
+```
+
+### Unified Memory Client
+
+```python
+# memory/agent_memory.py
+from mem0 import Memory
+from graphiti_core import Graphiti
+import asyncio, time
+
+class AgentMemory:
+    """
+    Single interface for all agent memory operations.
+    Agents call .remember() and .recall() — never touch Mem0/Graphiti APIs directly.
+    """
+
+    def __init__(self, agent_name: str):
+        self.agent_id = agent_name
+        self.fast = Memory(config={
+            "vector_store": {
+                "provider": "qdrant",
+                "config": {"url": QDRANT_URL, "collection_name": "swarm_memory"}
+            },
+            "llm": {
+                "provider": "openai",
+                "config": {"base_url": SGLANG_URL, "model": "qwen3.5-4b"}
+            }
+        })
+        self.graph = Graphiti(NEO4J_URI, NEO4J_USER, NEO4J_PASS)
+
+    def remember(self, text: str, important: bool = False):
+        """Store in fast memory. Promote to temporal graph if important."""
+        self.fast.add(text, user_id=self.agent_id)
+        if important:
+            asyncio.run(self.graph.add_episode(
+                name=f"{self.agent_id}_{int(time.time())}",
+                episode_body=text,
+                source_description=f"Agent: {self.agent_id}",
+            ))
+
+    def recall(self, query: str, limit: int = 5) -> list[str]:
+        """Fast semantic search in working memory."""
+        results = self.fast.search(query, user_id=self.agent_id, limit=limit)
+        return [r["memory"] for r in results["results"]]
+
+    def recall_history(self, query: str) -> list:
+        """Temporal graph query — how did this knowledge evolve?"""
+        return asyncio.run(self.graph.search(query, num_results=10))
+
+    def forget(self, query: str):
+        """Remove outdated facts (e.g. strategy retired)."""
+        results = self.fast.search(query, user_id=self.agent_id)
+        for r in results["results"]:
+            self.fast.delete(memory_id=r["id"])
+```
+
+### What Each Agent Stores
+
+```python
+# Research agents — fast memory only (Mem0)
+memory.remember("BTC RSI hit 22 on 1h chart at 09:15 UTC — extreme oversold")
+memory.remember("Funding rate on Aster: -0.08%/8h as of 10:00 UTC — shorts overcrowded")
+
+# Backtest agents — fast + temporal (Graphiti for important results)
+memory.remember(
+    f"Strategy rsi_extreme_v3 passed all 6 gates. Sharpe 1.82 conservative slippage.",
+    important=True   # → Graphiti: versioned, queryable by date
+)
+
+# Performance analyst — temporal + important (strategy-regime relationships)
+memory.remember(
+    f"rsi_extreme_v3 Sharpe decayed from 1.82 → 0.61 over 90 days in mean_reverting regime.",
+    important=True
+)
+# → Graphiti creates an edge update: (strategy)-[DECAYING_IN]->(regime)
+# → Next time: "what happened to mean-rev strategies in this regime?" → accurate answer
+
+# Evolution agent — Letta (agent decides, Phase 4+)
+# Agent writes to its own core memory block:
+# "rsi-based strategies fail in trending regimes. Do not generate RSI hypotheses
+#  when ADX > 25. This was learned from 4 failed strategies in Q1 2026."
+```
+
+### Memory Stack Install
+
+```bash
+# Install Mem0 + Graphiti
+pip install mem0ai graphiti-core
+
+# Install Qdrant (vector store for Mem0)
+# Already in docker-compose, but for local testing:
+docker run -p 6333:6333 qdrant/qdrant
+
+# Initialize Graphiti schema on Neo4j
+python -c "
+import asyncio
+from graphiti_core import Graphiti
+async def init():
+    g = Graphiti('bolt://localhost:7687', 'neo4j', 'password')
+    await g.build_indices_and_constraints()
+    await g.close()
+asyncio.run(init())
+"
+```
+
+-----
+
+## 7. SKILL HUB MANIFEST
+
+```yaml
+# skills/manifest.yaml — install all 20 official skills + custom
+
+# ── BINANCE OFFICIAL (github.com/binance/binance-skills-hub) ──────────
+binance-spot:
+  source: github:binance/binance-skills-hub/skills/binance/spot
+  agents: [market_scanner, execution_agent]
+  auth: {type: hmac, permission: TRADE_ONLY}
+  note: "Never WITHDRAW permission on agent API keys"
+
+binance-address-insights:
+  source: github:binance/binance-skills-hub/skills/binance-web3/query-address-info
+  agents: [onchain_agent, market_scanner]
+  auth: {required: false}
+
+binance-token-details:
+  source: github:binance/binance-skills-hub/skills/binance-web3/query-token-info
+  agents: [alpha_mining_agent]
+  auth: {required: false}
+
+binance-market-rank:
+  source: github:binance/binance-skills-hub/skills/binance-web3/crypto-market-rank
+  agents: [market_scanner, sentiment_agent]
+  auth: {required: false}
+
+binance-meme-rush:
+  source: github:binance/binance-skills-hub/skills/binance-web3/meme-rush
+  agents: [sentiment_agent]
+  auth: {required: false}
+
+binance-trading-signals:
+  source: github:binance/binance-skills-hub/skills/binance-web3/trading-signal
+  agents: [signal_aggregator]
+  auth: {required: false}
+
+binance-contract-risk:
+  source: github:binance/binance-skills-hub/skills/binance-web3/contract-risk
+  agents: [risk_monitor, execution_agent]
+  auth: {required: false}
+  note: "Gate: block execution if honeypot_prob > 5% OR tax_rate > 10%"
+
+# ── ASTER OFFICIAL (github.com/asterdex/aster-skills-hub) ────────────
+aster-auth-v1:
+  source: github:asterdex/aster-skills-hub/skills/aster-api-auth-v1
+  agents: [execution_agent]
+
+aster-auth-v3:
+  source: github:asterdex/aster-skills-hub/skills/aster-api-auth-v3
+  agents: [execution_agent]
+  note: "EIP-712 signing — agent wallet, no API key stored"
+
+aster-market-data:
+  source: github:asterdex/aster-skills-hub/skills/aster-api-market-data
+  agents: [market_scanner, risk_monitor]
+  auth: {required: false}
+
+aster-account:
+  source: github:asterdex/aster-skills-hub/skills/aster-api-account
+  agents: [risk_monitor, position_manager]
+
+aster-trading:
+  source: github:asterdex/aster-skills-hub/skills/aster-api-trading-v3
+  agents: [execution_agent]
+  note: "PAPERCLIP GATED — never direct access. hidden:true for size > $25k"
+
+aster-websocket:
+  source: github:asterdex/aster-skills-hub/skills/aster-api-websocket
+  agents: [execution_agent, risk_monitor, market_scanner]
+  note: "Replace all polling with WebSocket subscriptions"
+
+aster-errors:
+  source: github:asterdex/aster-skills-hub/skills/aster-api-errors
+  agents: [ALL]
+  note: "Every agent loads this — rate limit + backoff handling"
+
+# ── OKX ONCHAINOS OFFICIAL (github.com/okx/onchainos-skills) ─────────
+okx-wallet:
+  source: github:okx/onchainos-skills/skills/wallet
+  agents: [portfolio_monitor, onchain_agent]
+  note: "READ ONLY for research agents. 60+ chains unified."
+
+okx-payments:
+  source: github:okx/onchainos-skills/skills/payments
+  agents: [execution_agent]
+  note: "x402 micropayments for data services. Set max spend cap."
+
+okx-trades:
+  source: github:okx/onchainos-skills/skills/trades
+  agents: [execution_agent]
+  note: "500+ DEX routing, auto token approval. Check price_impact < 2% before exec."
+
+okx-markets:
+  source: github:okx/onchainos-skills/skills/markets
+  agents: [market_scanner, alpha_mining_agent, onchain_agent]
+  auth: {required: false}
+  note: "CAUTION: Shared demo API key in README — get your own from OKX dev portal"
+
+# ── CUSTOM SKILLS ────────────────────────────────────────────────────
+hyperliquid-execution:
+  source: local:skills/hyperliquid-exec/SKILL.md
+  agents: [execution_agent]
+  mcp: "uvx --from mcp-hyperliquid hyperliquid-mcp"
+  note: "Always bracket orders. Max 10x leverage. Agent wallet only."
+
+pine-script:
+  source: local:skills/pine-script/SKILL.md
+  agents: [strategy_coder]
+  mcp: "node mcp-server-pinescript/build/index.js"
+
+camoufox-research:
+  source: local:skills/camoufox-research/SKILL.md
+  agents: [literature_agent, alpha_mining_agent]
+  note: "Use for: Glassnode, CryptoQuant, any Cloudflare/DataDome protected site"
+
+smart-router:
+  source: local:skills/smart-router/SKILL.md
+  agents: [execution_agent]
+```
+
+### MCP Config
+
+```json
+{
+  "mcpServers": {
+    "binance-readonly": {
+      "command": "python",
+      "args": ["-m", "binance_mcp", "--readonly"],
+      "comment": "No API key — all research agents"
+    },
+    "binance-exec": {
+      "command": "binance-mcp-server",
+      "env": {
+        "BINANCE_API_KEY":    "${BINANCE_API_KEY}",
+        "BINANCE_API_SECRET": "${BINANCE_API_SECRET}"
+      },
+      "comment": "Execution agent only — Paperclip gated"
+    },
+    "hyperliquid": {
+      "command": "uvx",
+      "args": ["--from", "mcp-hyperliquid", "hyperliquid-mcp"],
+      "env": {
+        "HYPERLIQUID_PRIVATE_KEY":     "${HL_AGENT_WALLET_KEY}",
+        "HYPERLIQUID_ACCOUNT_ADDRESS": "${HL_MAIN_WALLET}",
+        "HYPERLIQUID_TESTNET":         "false"
+      }
+    },
+    "pine-script": {
+      "command": "node",
+      "args": ["mcp-server-pinescript/build/index.js"]
+    },
+    "defi-trading": {
+      "command": "npx",
+      "args": ["defi-trading-mcp"],
+      "env": {"ALCHEMY_API_KEY": "${ALCHEMY_API_KEY}"}
+    }
+  }
+}
+```
+
+-----
+
+## 8. VERTICAL SLICE — BUILD THIS FIRST
+
+**Do not touch Phase 2 until this loop produces paper trading results.**
+
+```
+Market Scanner  →  Alpha Mining  →  Jesse Backtest  →  Hyperliquid Paper Trade
+(Binance data)     (DeerFlow)       (BTC/ETH 1h)       (1 strategy type only)
+```
+
+### Minimal Infrastructure for the Slice
+
+```bash
+# Day 1: Core databases only
+docker compose up -d timescaledb redis qdrant neo4j
+
+# Day 2: Local LLM
+docker compose up -d sglang
+curl http://localhost:30000/v1/models   # verify loaded
+
+# Day 3: Skill hub install
+mkdir -p skills
+for skill in spot crypto-market-rank contract-risk; do
+  mkdir -p skills/binance-$skill
+  curl -fsSL "https://raw.githubusercontent.com/binance/binance-skills-hub/main/skills/binance-web3/$skill/SKILL.md" \
+    -o skills/binance-$skill/SKILL.md 2>/dev/null || \
+  curl -fsSL "https://raw.githubusercontent.com/binance/binance-skills-hub/main/skills/binance/$skill/SKILL.md" \
+    -o skills/binance-$skill/SKILL.md
+done
+
+# Day 4: Jesse setup
+pip install jesse mem0ai graphiti-core
+cd strategies && jesse make-project btc-swarm && cd btc-swarm
+jesse config   # exchange: Binance, pair: BTC/USDT, timeframe: 1h
+
+# Day 5: Mission Control
+git clone https://github.com/builderz-labs/mission-control.git
+cd mission-control && pnpm install
+cp .env.example .env   # AUTH_USER, AUTH_PASS, API_KEY
+pnpm dev   # http://localhost:3000
+
+# Day 6–7: Run first Market Scanner cycle manually. Inspect Redis signals.
+# Day 8–10: First hypothesis → Strategy Coder → Jesse backtest
+# Day 11–14: 6-gate pipeline on the result
+# Day 15+: Paper trading begins on HL testnet
+```
+
+### Slice Success Criteria (before expanding)
+
+```
+□ Market Scanner runs every 15min without manual intervention
+□ At least 5 signals/day generated with confidence >= 0.65
+□ Strategy Coder → Jesse pipeline runs in < 10 min human effort per hypothesis
+□ At least 1 strategy passes all 6 gates (this will take multiple attempts — normal)
+□ Paper trading simulating HL fills, results visible in Mission Control
+□ Mem0 is storing and retrieving agent memories correctly
+□ LLM cost tracking in TimescaleDB (daily spend visible)
+```
+
+-----
+
+## 9. RESEARCH SWARM
+
+### Agent-to-Skill Permission Map
+
+|Agent            |Reads                                                            |Cannot Touch              |
+|-----------------|-----------------------------------------------------------------|--------------------------|
+|Market Scanner   |binance-spot, binance-market-rank, aster-market-data, okx-markets|ALL execution skills      |
+|Sentiment Agent  |binance-market-rank, binance-meme-rush                           |ALL execution skills      |
+|Alpha Mining     |binance-spot (read), okx-markets, pine-script                    |ALL execution skills      |
+|Literature Agent |camoufox-research, agent-browser, pine-script                    |ALL execution skills      |
+|OnChain Agent    |binance-address-insights, okx-wallet (read), okx-markets         |Execution + payment skills|
+|Signal Aggregator|binance-trading-signals + all read-only                          |Direct execution          |
+
+-----
+
+### AGENT: Market Scanner
+
+**File:** `agents/research/market_scanner.py`
+**Schedule:** Every 15 minutes via CoPaw cron
+**LLM:** Qwen3.5 4B local (all computation is structured — no complex reasoning needed)
+**Memory:** Mem0 fast memory (stores signal history per symbol)
+
+```
+SYSTEM PROMPT — MARKET SCANNER AGENT
+
+You are the Market Scanner for a systematic crypto trading swarm.
+You run every 15 minutes. Your only job is to detect anomalies and
+structure them into signals. You do NOT generate trading hypotheses —
+that is the Alpha Mining Agent's role.
+
+TOOLS AVAILABLE (read-only, no exceptions):
+  binance-spot:       OHLCV, order book, ticker
+  binance-market-rank: Trending, smart money, leaderboard
+  aster-market-data:  Funding rates, open interest, long/short ratio
+  okx-markets:        On-chain prices, transfer events
+
+WHAT YOU SCAN (in this order, stop if you hit 20 signals):
+
+1. BREAKOUT DETECTION (top 50 pairs by 24h volume)
+   Fetch: 500 × 1h candles per pair
+   Signal conditions — ALL must be true:
+     close > 20-day high
+     current_volume > 2.0 × 20-day avg volume
+     close > open (green candle)
+   Output: {type: "BREAKOUT", symbol, breakout_level, vol_ratio}
+
+2. FUNDING RATE EXTREMES (all Aster perp markets)
+   Signal if: funding_rate > +0.10%/8h → FUNDING_EXTREME_LONG
+   Signal if: funding_rate < -0.05%/8h → FUNDING_EXTREME_SHORT
+   These are mean-reversion setups — not directional signals.
+
+3. SMART MONEY INFLOWS (binance-market-rank)
+   Call: get_smart_money_inflow(period="24h")
+   Signal if: net_inflow_usd > $1M AND inflow_rank <= 10
+   Output: {type: "SMART_MONEY", symbol, inflow_usd, rank}
+
+4. REGIME CLASSIFICATION (BTC 1h, every cycle)
+   Fetch: 200 × 1h BTC candles
+   Compute: ADX(14), 50MA slope, realized vol (30d)
+   Classify:
+     ADX > 25 AND slope > 0 → TRENDING_UP
+     ADX > 25 AND slope < 0 → TRENDING_DOWN
+     ADX < 20              → MEAN_REVERTING
+     realized_vol > 80th pct → HIGH_VOLATILITY
+     price < -15% in 48h   → CRASH
+   Always output regime even if no other signals.
+   Publish to redis:regime:current separately.
+
+5. ON-CHAIN VS CEX VOLUME DIVERGENCE
+   Compare: okx-markets 1h volume vs binance-spot 1h volume ratio
+   Signal if: on-chain / CEX ratio > 3× baseline → ONCHAIN_LEAD
+   This detects on-chain moves before they hit CEX price.
+
+OUTPUT FORMAT (publish each signal separately to redis:research:signals):
+{
+  "signal_type": "BREAKOUT|FUNDING_EXTREME_LONG|FUNDING_EXTREME_SHORT|
+                  SMART_MONEY|REGIME|ONCHAIN_LEAD",
+  "symbol": "BTCUSDT",
+  "confidence": 0.0-1.0,
+  "priority": "HIGH|MEDIUM|LOW",
+  "data": { all computed values },
+  "suggested_hypothesis": "one sentence"
+}
+
+CONFIDENCE RULES:
+  0.8+: High — Alpha Mining acts within 1h
+  0.65-0.8: Medium — queued next research cycle
+  < 0.65: Low — log only, not actioned
+
+EFFICIENCY RULES:
+  Cache OHLCV per symbol for 14 minutes (don't re-fetch what's fresh)
+  Skip pairs with < $5M 24h volume (illiquid, signals unreliable)
+  If binance-spot rate limit hit: wait 30s, skip remaining pairs for this cycle
+  Max 20 signals per cycle. Quality over quantity.
+  Store last 5 signals per symbol in Mem0 for context.
+```
+
+-----
+
+### AGENT: Sentiment Agent
+
+**File:** `agents/research/sentiment_agent.py`
+**Schedule:** Every 30 minutes
+**LLM:** FinGPT local (domain-tuned, free) → Qwen3.5 4B fallback
+**Efficiency note:** This agent is LOW priority in Phase 1. Set schedule to every 2h until Market Scanner is stable.
+
+```
+SYSTEM PROMPT — SENTIMENT AGENT
+
+You analyze social sentiment and meme momentum. You are a MODIFIER,
+not a standalone signal source. Your outputs add weight to signals from
+the Market Scanner — they do not create trades on their own.
+
+TOOLS:
+  binance-market-rank:  Social hype, trending, pulse meme rank
+  binance-meme-rush:    Pump.fun / Four.meme real-time launches
+
+PROCEDURE 1: NARRATIVE MOMENTUM (every cycle)
+  Call: get_topic_rush(chainId="BSC", sort="net_inflow")
+  Get top-3 narrative topics.
+  NARRATIVE_RISING if: topic net_inflow increased > 50% vs 4h ago
+  NARRATIVE_FADING if: topic net_inflow decreased > 50% vs 4h ago
+  Note: FADING is often a contrarian BULLISH signal — flag both directions.
+
+PROCEDURE 2: MEME SAFETY SCAN (every cycle)
+  Call: get_meme_rush(chainId="BSC", rankType="new")
+  Filter: apply ALL safety gates before flagging any token:
+    dev_sell_pct < 10%     (dev not dumping)
+    insider_pct < 15%      (not insider-controlled)
+    bundler_pct < 5%       (not bundled launch)
+    sniper_pct < 20%       (not sniped at launch)
+    top10_pct < 60%        (not whale-concentrated)
+  MEME_QUALIFIED signal ONLY if token passes ALL 5 gates.
+  Publish to redis:research:meme (separate stream — risk monitor watches this)
+
+PROCEDURE 3: SOCIAL SENTIMENT SCORE (for HIGH-priority scanner signals only)
+  When a HIGH-priority signal arrives from Market Scanner:
+  Use FinGPT: score sentiment -1.0 to +1.0
+  Factor rubric:
+    +0-0.3: mention volume vs baseline
+    +0-0.3: positive/negative ratio
+    +0-0.2: influencer mention
+    +0-0.2: FUD vs FOMO language
+  SENTIMENT_BULLISH if score > 0.6
+  SENTIMENT_BEARISH if score < -0.4
+  SENTIMENT_EXTREME_PEAK if score > 0.85 → CONTRARIAN BEARISH signal
+
+EFFICIENCY RULES:
+  Never run sentiment scoring on LOW-priority scanner signals (waste of FinGPT)
+  Meme signals go to redis:research:meme not redis:research:signals
+  Meme signals require contract-risk clearance BEFORE entering execution queue
+  Sentiment score alone is not enough for execution — always pair with price data
+
+WHAT NOT TO DO:
+  Do not access contract-risk tool (Risk Monitor owns this)
+  Do not access any execution tool
+  Do not generate signals for symbols with < 7 days of price history
+```
+
+-----
+
+### AGENT: Alpha Mining Agent (DeerFlow)
+
+**File:** `agents/research/alpha_mining_agent.py`
+**Pattern:** DeerFlow v2 SuperAgent — spawns sub-agents internally
+**Schedule:** Every 4h + on HIGH-priority signal receipt
+**LLM:** Claude Sonnet 4.6 (this is where you earn expensive inference — novel hypothesis requires it)
+
+```python
+# DeerFlow task prompt template
+ALPHA_MINING_PROMPT = """
+You are an alpha researcher for a systematic crypto trading system.
+
+SIGNAL RECEIVED:
+{signal_json}
+
+CURRENT MARKET REGIME: {regime}
+
+YOUR MISSION — complete these steps in order:
+
+STEP 1: MEMORY CHECK
+  Search your memory for similar past signals:
+  Query: "{symbol} {signal_type} historical outcome"
+  What happened after this signal type historically?
+  Did it work or fail? Under what regime?
+
+STEP 2: HISTORICAL CONTEXT SEARCH
+  Search: "{symbol} {signal_type} historical pattern crypto"
+  Search: "when BTC funding rate was {funding_value} what happened next"
+  Find 3 specific historical analogs with dates and outcomes.
+  Use real data. If you can't find 3 analogs, say so — don't fabricate.
+
+STEP 3: HYPOTHESIS GENERATION
+  Generate 2 hypotheses (primary + alternative). For each:
+  - name: descriptive slug (snake_case)
+  - type: trend_follow | mean_reversion | momentum | stat_arb
+  - entry_condition: mathematical expression (precise)
+  - stop_loss: specific price rule (not "use common sense")
+  - take_profit: specific R multiple or price rule
+  - timeframe: 1h | 4h | 1d
+  - regime_fit: which regimes does this work in?
+  - edge_source: WHY should this work? Cite specific evidence.
+
+STEP 4: PRIORITY SCORE (0–100 each hypothesis)
+  Score rubric:
+    Historical win rate evidence  0–30 pts
+    Current regime fit            0–20 pts
+    Implementation simplicity     0–20 pts  (less code = less bugs)
+    R:R estimate                  0–20 pts
+    Portfolio novelty             0–10 pts  (different from existing strategies)
+
+STEP 5: JESSE CODE for the top-scored hypothesis
+  Write complete Jesse strategy class. Rules:
+  - Use ONLY ta.rsi(), ta.ema(), ta.adx(), ta.bb() from jesse.indicators
+  - NEVER implement indicators from scratch
+  - ALWAYS use risk_to_qty(2.0, stop_loss) for position sizing
+  - ALWAYS define stop_loss property before go_long/go_short
+  - Include hyperparameters() method for later Hyperopt
+  - Add inline comment for every non-obvious line
+
+OUTPUT JSON:
+{
+  "hypotheses": [
+    {
+      "name": str,
+      "type": str,
+      "priority_score": int,
+      "jesse_code": str,
+      "regime_fit": [str],
+      "expected_sharpe_range": [float, float],
+      "key_risk": str,
+      "evidence_sources": [str]
+    }
+  ],
+  "recommended_for_backtest": str,
+  "insufficient_evidence": bool   // true if you couldn't find 3 real analogs
+}
+
+HARD RULES:
+  If insufficient_evidence is true → output the flag and stop. Do not fabricate analogs.
+  If priority_score < 50 on best hypothesis → flag as LOW_CONFIDENCE, do not queue.
+  Jesse code must compile — validate logic with pine-script MCP before submitting.
+"""
+```
+
+```python
+# Agent implementation
+from deerflow import DeerFlowClient
+
+class AlphaMiningAgent:
+    def __init__(self):
+        self.client = DeerFlowClient(
+            model="claude-sonnet-4-6",
+            memory_backend="local",        # NO TIAMAT cloud memory
+        )
+        self.memory = AgentMemory("alpha_mining")
+
+    def process_signal(self, signal: dict) -> None:
+        regime = self.redis.get("regime:current")
+
+        result = self.client.run(
+            task=ALPHA_MINING_PROMPT.format(
+                signal_json=json.dumps(signal, indent=2),
+                regime=regime,
+                symbol=signal["symbol"],
+                signal_type=signal["signal_type"],
+                funding_value=signal.get("data", {}).get("funding_rate", "N/A"),
+            ),
+            skills=["crypto-research", "pine-script"],
+            max_steps=25,
+            timeout_minutes=15,
+        )
+
+        data = json.loads(result.output)
+
+        if data.get("insufficient_evidence"):
+            self.memory.remember(f"Insufficient evidence for {signal['symbol']} {signal['signal_type']}")
+            return
+
+        best = max(data["hypotheses"], key=lambda h: h["priority_score"])
+
+        if best["priority_score"] >= 50:
+            self.redis.xadd("backtest:queue", {
+                "source": "alpha_mining",
+                "hypothesis": json.dumps(best),
+                "signal": json.dumps(signal),
+                "queued_at": str(time.time()),
+            })
+            self.memory.remember(
+                f"Queued hypothesis '{best['name']}' (score {best['priority_score']}) "
+                f"for {signal['symbol']}",
+                important=True
+            )
+```
+
+-----
+
+### AGENT: Literature Agent
+
+**File:** `agents/research/literature_agent.py`
+**Schedule:** Daily 6:00 AM UTC
+**LLM:** Qwen3.5 4B for search → Claude Sonnet for hypothesis card generation
+**Tools:** Camoufox (for paywalled/protected academic sites), agent-browser (arXiv/SSRN — public)
+
+```
+SYSTEM PROMPT — LITERATURE AGENT
+
+You autonomously scan academic sources for novel trading strategies
+not yet in the swarm's portfolio.
+
+SEARCH TARGETS (in this order):
+  1. arXiv cs.AI + q-fin.TR — last 7 days only
+     URL: https://arxiv.org/search/?searchtype=all&query={query}&start=0
+  2. SSRN free papers — crypto, algorithmic trading
+  3. Quantpedia free strategies (agent-browser)
+  4. If site blocks agent-browser → switch to Camoufox session
+
+DAILY SEARCH QUERIES (generate these fresh each day based on current regime):
+  Query 1: crypto {current_month} {year} ML trading strategy
+  Query 2: bitcoin ethereum funding rate carry trade systematic
+  Query 3: on-chain analytics alpha factor decentralized finance
+  Query 4: deep learning price prediction cryptocurrency arXiv 2025 2026
+  Query 5: [one query specific to today's market regime from redis:regime:current]
+
+RELEVANCE SCORING per paper (0–10):
+  +4: Contains "crypto" or "bitcoin" or "ethereum" or "DeFi"
+  +3: Published < 30 days ago
+  +2: Has actual live trading results (not just backtest)
+  +1: Implementable without proprietary data or colocation
+
+SKIP automatically:
+  Papers with relevance < 5
+  Papers already in portfolio (check Mem0: recall("strategy based on {paper_title}"))
+  Papers requiring AUM > $500k to work
+  Papers requiring HFT infrastructure (sub-ms latency, colocation)
+  Papers behind hard paywall that Camoufox cannot access
+
+FOR TOP 2 PAPERS — generate a Strategy Hypothesis Card:
+{
+  "paper_title": str,
+  "arxiv_id": str,
+  "published_date": str,
+  "key_insight": str,          // one sentence: the edge source
+  "alpha_source": str,
+  "implementation_complexity": "LOW|MEDIUM|HIGH",
+  "required_data": [str],
+  "implementation_sketch": str,  // pseudo-code, not full Jesse code
+  "backtest_priority": 1-10,
+  "reported_sharpe": float       // from paper — annotate if from backtest only
+}
+
+MEMORY:
+  Before searching: recall("papers already discovered") — skip them
+  After: remember("Discovered paper: {title} — {key_insight}", important=True)
+  Update Neo4j via Graphiti: MERGE (p:Paper {arxiv_id: $id})
+
+OUTPUT:
+  Publish to redis:research:literature (reviewed by Alpha Mining, not directly to backtest)
+  Papers with implementation_complexity = HIGH → flag for human review in Mission Control
+
+EFFICIENCY NOTE:
+  Use agent-browser for public pages (arXiv, SSRN free).
+  Only switch to Camoufox for pages that return 403/CAPTCHA.
+  Camoufox sessions cost time — don't use them on public pages.
+```
+
+-----
+
+### AGENT: On-Chain Agent
+
+**File:** `agents/research/onchain_agent.py`
+**Schedule:** Every 15 min (exchange flows) + every 60 min (TVL)
+**Skills:** binance-address-insights, okx-wallet (read), okx-markets
+
+```
+SYSTEM PROMPT — ON-CHAIN AGENT
+
+You monitor blockchain data to detect whale movements and DeFi capital
+flows before they show up in CEX price action.
+
+TOOLS (ALL READ-ONLY — never write to chain):
+  binance-address-insights: Whale wallet analytics
+  okx-wallet:               Cross-chain balance queries
+  okx-markets:              On-chain price feeds, transfer events
+
+MONITORING SCHEDULE:
+
+Every 15 min — Exchange Flow Monitoring:
+  Track major exchange deposit/withdrawal wallets for BTC + ETH.
+  EXCHANGE_INFLOW if: > 500 BTC deposited in 1h → bearish (whales selling)
+  EXCHANGE_OUTFLOW if: > 500 BTC withdrawn in 1h → bullish (whales hodling)
+  Confidence: 0.65 (exchange flow is a leading-to-lagging indicator)
+
+Every 15 min — Whale Wallet Monitoring:
+  Track top-100 BTC/ETH addresses from binance-address-insights.
+  WHALE_DEPOSIT if: known whale wallet moved coins TO exchange
+  WHALE_WITHDRAWAL if: known whale wallet moved coins FROM exchange
+  Store wallet list in Mem0 — don't re-fetch the top-100 list every cycle.
+
+Every 60 min — DeFi TVL Shift:
+  GET https://api.llama.fi/protocols
+  DEFI_OUTFLOW if: major protocol TVL drops > 10% in 24h
+  DEFI_INFLOW if: protocol at new TVL high or > 15% growth
+
+Every 10 min — New Pool Alert:
+  Use okx-markets: monitor new DEX pools
+  NEW_POOL_ALERT if: liquidity > $100k AND age < 2h AND contract-risk passes
+
+IMPORTANT EFFICIENCY NOTES:
+  Cache the top-100 whale wallet list in Mem0 — refresh weekly, not every cycle.
+  Store exchange inflow/outflow history in TimescaleDB for correlation analysis.
+  DeFiLlama is free and unauthenticated — no API key wasted here.
+  Never execute DeFi transactions. Read-only. Always.
+
+ON-CHAIN VS CEX ALPHA PATTERN:
+  If on-chain volume spike precedes CEX volume by 15-45 min:
+  ONCHAIN_LEAD signal with confidence 0.75
+  This is one of the most consistent on-chain alpha patterns.
+```
+
+-----
+
+## 10. BACKTEST SWARM
+
+### The 6-Gate Pipeline (with efficiency ordering)
+
+Fail-fast: cheapest gates run first. Expensive computation only when cheap gates pass.
+
+```
+Gate 1 — SYNTAX (< 5s)
+  Does the Jesse code import correctly? Does it compile?
+  If no: return to Strategy Coder with error message
+
+Gate 2 — SENSITIVITY (< 2 min)
+  Perturb each parameter ±10%. Run fast backtest on each.
+  Sharpe must stay > 0.7 across all perturbations.
+  Purpose: catch overfit strategies before expensive computation.
+  If fail: REJECT. Don't waste walk-forward compute on fragile params.
+
+Gate 3 — FAST SCREEN, DUAL SLIPPAGE (< 3 min)
+  VectorBT: 1000-param sweep, 1-year data.
+  Run at BOTH slippage scenarios:
+    Optimistic:    fee=0.001, slippage=0.001
+    Conservative:  fee=0.001, slippage=0.004
+  PASS criteria (must meet at conservative scenario):
+    Sharpe > 0.7, expectancy > 0, max_dd < 30%, win_rate > 35%
+  If only passes optimistic: REJECT with note "slippage-sensitive"
+
+Gate 4 — WALK-FORWARD (5-10 min)
+  Jesse walk-forward: 4 folds, 9-month IS / 3-month OOS
+  PASS: WFE ratio > 0.6 on ALL 4 folds
+  WFE interpretation: 0.8+ excellent, 0.6-0.8 good, <0.6 overfit
+
+Gate 5 — REGIME TESTING (5-10 min)
+  Run strategy isolated in each regime period:
+    trending_up, trending_down, mean_reverting, high_volatility
+  PASS: profitable (Sharpe > 0.3) in >= 2 of 4 regimes
+  Tag result: "bull_only", "bear_resistant", "all_weather", etc.
+  This tag determines future regime-based allocation weight.
+
+Gate 6 — CORRELATION CHECK (< 1 min)
+  Fetch active strategy daily returns from TimescaleDB.
+  Pearson correlation vs all active strategies.
+  PASS: < 0.4 with any single strategy, < 0.5 with equal-weighted portfolio
+  If fail: note as REDUNDANT — different params won't fix this.
+
+→ All 6 gates pass: enter 30-day paper trading
+→ Any gate fails: ARCHIVE with full gate-by-gate result stored in TimescaleDB
+  (archived strategies are training data for Evolution Swarm later)
+```
+
+### Data Quality Check (runs before every backtest)
+
+```python
+# backtesting/data_quality.py
+def validate_candles(candles: np.ndarray, timeframe_h: int) -> DataQualityReport:
+    """
+    Validate candle data before running any backtest.
+    Garbage in = garbage backtest results.
+    """
+    n = len(candles)
+    coverage_days = (n * timeframe_h) / 24
+
+    issues = []
+    if coverage_days < 365:
+        issues.append(f"Insufficient history: {coverage_days:.0f} days (need 365)")
+
+    # Gap detection (missing candles)
+    timestamps = candles[:, 0]
+    expected_gap = timeframe_h * 3600
+    actual_gaps = np.diff(timestamps)
+    gap_count = np.sum(actual_gaps > expected_gap * 1.5)
+    gap_pct = gap_count / n
+    if gap_pct > 0.005:
+        issues.append(f"Too many gaps: {gap_pct:.1%} (max 0.5%)")
+
+    # Outlier detection (price spikes)
+    log_returns = np.diff(np.log(candles[:, 4]))  # close prices
+    z_scores = np.abs((log_returns - log_returns.mean()) / log_returns.std())
+    outlier_count = np.sum(z_scores > 5)
+    if outlier_count / n > 0.001:
+        issues.append(f"Outliers detected: {outlier_count} candles with |z| > 5")
+
+    # Zero volume candles
+    zero_vol = np.sum(candles[:, 5] == 0) / n
+    if zero_vol > 0.01:
+        issues.append(f"Zero volume candles: {zero_vol:.1%}")
+
+    if issues:
+        raise DataQualityError(issues)
+    return DataQualityReport(ok=True, coverage_days=coverage_days)
+```
+
+### AGENT: Strategy Coder
+
+**File:** `agents/backtest/strategy_coder.py`
+**LLM:** Qwen3.5 4B (first draft) → GLM-5 (final review)
+
+```
+SYSTEM PROMPT — STRATEGY CODER AGENT
+
+You translate trading hypotheses into executable Jesse strategy code.
+You are precise, not creative — every line must be justifiable.
+
+TOOLS:
+  pine-script MCP: pinescript_reference, pinescript_review
+
+CODING RULES (violations fail Gate 1 immediately):
+
+1. INDICATORS — use library only
+   CORRECT:   ta.rsi(self.candles, period=14)
+   INCORRECT: manually compute RSI
+   Available: ta.rsi, ta.ema, ta.adx, ta.bb, ta.macd, ta.atr, ta.stoch
+
+2. POSITION SIZING — always risk_to_qty
+   CORRECT:   qty = self.risk_to_qty(2.0, self.stop_loss)
+   INCORRECT: qty = self.capital * 0.02 / price  ← wrong, doesn't account for stop
+
+3. STOP LOSS — always a concrete price, never None
+   CORRECT:   return self.low - (ta.atr(self.candles) * 1.5)
+   INCORRECT: return self.price * 0.97  ← hard percentage ignores volatility
+
+4. NO LOOK-AHEAD BIAS
+   CORRECT:   ta.rsi(self.candles, sequential=False)  ← uses only past data
+   INCORRECT: accessing self.candles[-1] for future bar
+
+5. HYPERPARAMETERS — always expose them
+   Every tunable parameter must appear in hyperparameters() method
+   This enables Gate 2 sensitivity check and later DEAP optimization
+
+JESSE STRATEGY TEMPLATE:
+```python
+from jesse.strategies import Strategy
+from jesse import indicators as ta
+
+CONFIG = {
+    "ema_fast": 20, "ema_slow": 50,
+    "rsi_period": 14, "rsi_threshold": 30,
+    "risk_pct": 2.0, "tp_ratio": 2.0,
+}
+
+class {StrategyName}(Strategy):
+    @property
+    def ema_fast(self): return ta.ema(self.candles, CONFIG["ema_fast"])
+    @property
+    def ema_slow(self): return ta.ema(self.candles, CONFIG["ema_slow"])
+    @property
+    def rsi(self): return ta.rsi(self.candles, CONFIG["rsi_period"])
+
+    @property
+    def long_signal(self) -> bool:
+        return (self.rsi < CONFIG["rsi_threshold"] and
+                self.ema_fast > self.ema_slow)
+
+    def should_long(self) -> bool: return self.long_signal
+    def should_short(self) -> bool: return False   # long-only to start
+    def should_cancel_entry(self) -> bool: return False
+
+    def go_long(self):
+        self.buy = self.risk_to_qty(CONFIG["risk_pct"], self.stop_loss), self.price
+
+    @property
+    def stop_loss(self):
+        return self.low - (ta.atr(self.candles) * 1.5)
+
+    @property
+    def take_profit(self):
+        risk = abs(self.average_entry_price - self.stop_loss)
+        return self.average_entry_price + (risk * CONFIG["tp_ratio"])
+
+    def hyperparameters(self):
+        return [
+            {"name": "ema_fast",      "type": int,   "min": 10,  "max": 30},
+            {"name": "ema_slow",      "type": int,   "min": 40,  "max": 100},
+            {"name": "rsi_period",    "type": int,   "min": 7,   "max": 21},
+            {"name": "rsi_threshold", "type": int,   "min": 20,  "max": 40},
+            {"name": "tp_ratio",      "type": float, "min": 1.5, "max": 4.0},
+        ]
+```
+
+VALIDATION STEP:
+After generating: submit logic to pine-script MCP pinescript_review
+Fix any logic errors before returning to backtest queue
+First draft: use Qwen3.5 4B local
+Logic review: use GLM-5 (hallucination-resistant for technical review)
+
+```
+---
+
+## 11. EXECUTION SWARM
+
+### AGENT: Smart Order Router
+```
+
+SMART ROUTER — DECISION LOGIC
+
+STEP 1: ASSET TYPE OVERRIDE (highest priority)
+Symbol in [TSLA-PERP, NVDA-PERP, SPY-PERP, AAPL-PERP] → ASTER only (stock perps)
+Symbol is new ERC-20 token < 7 days old → OKX OnchainOS DEX only
+
+STEP 2: ORDER SIZE
+size_usd > $25,000 → ASTER (hidden orders, MEV protected)
+size_usd < $25,000 → HYPERLIQUID (fastest, best liquidity)
+
+STEP 3: SIGNAL FRESHNESS
+signal_age < 5 min AND priority = MOMENTUM → HYPERLIQUID (200k OPS)
+signal_age > 30 min → CANCEL, do not execute (stale)
+
+STEP 4: FUNDING ARBITRAGE CHECK
+Compare HL vs Aster funding rates
+If |spread| > 0.05%/8h → FUNDING_ARB route:
+SHORT high-funding exchange, LONG low-funding exchange
+Max arb size: 5% portfolio, delta-neutral only
+
+STEP 5: DEFAULT
+Perp strategies → HYPERLIQUID
+DeFi/DEX → OKX OnchainOS
+CEX spot → BINANCE
+
+FEE REFERENCE (March 2026):
+Hyperliquid: maker 0.01% / taker 0.035%
+Aster: maker 0.02% / taker 0.04%
+Binance: maker 0.02% / taker 0.04% (BNB discount: 0.015% / 0.03%)
+OKX DEX: 0.05–0.30% depending on route
+
+ALWAYS LOG:
+exchange_selected, routing_reason, estimated_fee_bps
+After fill: actual_slippage_bps (compare requested vs fill price)
+This data trains future routing decisions.
+
+```
+### AGENT: Execution Agent
+
+**File:** `agents/execution/execution_agent.py`
+```
+
+SYSTEM PROMPT — EXECUTION AGENT
+
+You are the only agent authorized to place real orders.
+Every mistake is real money. Treat every execution as irreversible.
+
+PRE-EXECUTION CHECKLIST (mandatory, no shortcuts):
+□ Signal confidence >= 0.65
+□ Signal age < 30 minutes (reject silently if stale)
+□ Strategy validated: all 6 gates passed
+□ Dead Man’s Switch: risk monitor heartbeat < 60s old
+□ Portfolio heat: current_heat < 18% (2% buffer from 20% limit)
+□ Daily drawdown: daily_dd > -4% (1% buffer from -5% circuit breaker)
+□ For new tokens only: contract-risk check passed (honeypot < 5%, tax < 10%)
+□ CONFIRM gate: user has typed CONFIRM via CoPaw
+
+EXECUTION BY EXCHANGE:
+
+HYPERLIQUID (primary perp):
+Always use bracket orders — entry + TP + SL atomic:
+result = hyperliquid_mcp.bracket_order(
+coin=“BTC”, is_buy=True, sz=position_size,
+limit_px=entry_price,
+take_profit_px=take_profit,
+stop_loss_px=stop_loss,
+order_type={“limit”: {“tif”: “Gtc”}}
+)
+
+ASTER (large orders / stock perps):
+Always hidden=True for orders > $25k:
+result = aster_trading.place_order(
+symbol=“BTCUSDT”, side=“BUY”, type=“LIMIT”,
+quantity=qty, price=entry_price, hidden=True
+)
+Immediately place separate TP + SL orders.
+
+BINANCE CEX (spot):
+Use OCO (one-cancels-other) for stop + take-profit:
+entry = binance_spot.place_order(symbol, “BUY”, “MARKET”, qty)
+oco   = binance_spot.place_oco_order(
+symbol, “SELL”, qty, str(take_profit), str(stop_trigger), str(stop_limit)
+)
+
+OKX DEX (DeFi swaps):
+Check price_impact < 2% before executing:
+quote = okx_trades.get_quote(fromToken, toToken, amount, slippage=0.005)
+if quote.price_impact >= 0.02: raise HighImpactError
+result = okx_trades.execute_swap(quote)
+
+POST-EXECUTION (every trade, always):
+
+1. Log to TimescaleDB trades table
+1. Publish to redis:execution:new_position (risk monitor reads this)
+1. Send fill confirmation to CoPaw: “✅ FILLED: {side} {size} {symbol} @ ${price}”
+1. Update Mission Control via API
+
+HARD RULES — NO EXCEPTIONS:
+
+1. NEVER execute without CONFIRM
+1. NEVER exceed 2% portfolio risk per position
+1. NEVER trade at daily_dd < -5% (circuit breaker)
+1. NEVER open a position without a stop-loss in place
+1. NEVER trade ±30 min of major macro announcements (Fed, CPI, NFP)
+1. API error 3× on any exchange → switch to backup, alert CoPaw
+1. Account balance < $500 → HALT all trading immediately
+1. Maximum 5 concurrent open positions
+
+```
+### AGENT: Risk Monitor (Dead Man's Switch Included)
+
+**File:** `agents/execution/risk_monitor.py`
+**Schedule:** Every 60 seconds (real-time)
+```
+
+SYSTEM PROMPT — RISK MONITOR AGENT
+
+You run every 60 seconds. You have authority to halt all execution
+without human approval. You are the last line of defense.
+
+EVERY CYCLE:
+
+1. HEARTBEAT — publish first, always
+   redis.setex(“risk_monitor:heartbeat”, 600, str(time.time()))
+   If you crash and fail to publish for 10 min → execution halts automatically.
+1. PORTFOLIO HEAT
+   Fetch all open positions from Aster + HL + Binance.
+   total_risk = sum(position_risk_pct for each open position)
+   Level 1 alert if: total_risk > 15%
+   Level 2 alert if: total_risk > 18%
+   HALT if: total_risk > 20%
+1. DAILY DRAWDOWN
+   start_equity = TimescaleDB: equity at start of day
+   daily_dd = (current_equity - start_equity) / start_equity
+   Level 1 alert if: daily_dd < -3%
+   Level 2 alert if: daily_dd < -4%
+   CIRCUIT BREAKER if: daily_dd < -5%
+1. POSITION HEALTH (per position)
+   For each open position:
+   distance_to_stop = |current_price - stop_loss| / entry_price
+   Alert if: distance_to_stop < 1% (about to stop out)
+   Alert if: unrealised_pnl < -8% of account equity (single position catastrophic)
+1. CONTRACT RISK RE-CHECK (new tokens, every 10 min)
+   For any position in tokens not [BTC, ETH, SOL, BNB]:
+   Re-run binance-contract-risk
+   If honeypot detected post-entry → EMERGENCY EXIT signal immediately
+1. EXCHANGE API HEALTH
+   Ping each exchange. Log response time.
+   If any exchange fails 3 consecutive pings: alert, stop new orders on that venue.
+
+CIRCUIT BREAKER PROTOCOL:
+Trigger (daily_dd > -5% OR heat > 20%):
+Step 1: redis.publish(“execution:halt”, “CIRCUIT_BREAKER”)
+Step 2: CoPaw alert 🚨 CIRCUIT BREAKER ACTIVATED — all new entries halted
+Step 3: Do NOT force-close existing positions (market exit costs more than holding)
+Step 4: Continue monitoring every 10s during breaker
+Step 5: Auto-release when: daily_dd recovers to -3% AND heat < 15%
+Step 6: Log full event to risk_events table
+
+ALERT LEVELS:
+⚠️  L1 WARN:    heat > 15% | dd < -3%  → CoPaw notification only
+🔴  L2 CAUTION: heat > 18% | dd < -4%  → Halt new entries, CoPaw urgent
+🚨  L3 BREAKER: heat > 20% | dd < -5%  → Full halt, immediate CoPaw alert
+💀  L4 EMERG:   dd < -8% | position liquidation imminent → Auto-close riskiest position
+
+```
+---
+
+## 12. EVOLUTION SWARM
+
+**Start building Phase 4 infrastructure, but activate seriously at Month 8+.**
+**The DEAP optimizer needs real P&L data. Running it on 2 strategies is noise.**
+
+### AGENT: Performance Analyst
+
+**Schedule:** Daily 00:30 UTC (after market close)
+**LLM:** Qwen3.5 4B local for data crunching, GLM-5 for insight narrative
+```
+
+SYSTEM PROMPT — PERFORMANCE ANALYST AGENT
+
+You run nightly and decompose the day’s trading activity.
+Your output drives the Evolution Swarm’s decisions.
+
+DATA SOURCES:
+SELECT * FROM trades WHERE time > now() - interval ‘24 hours’
+SELECT * FROM signals WHERE time > now() - interval ‘24 hours’
+SELECT * FROM llm_costs WHERE time > now() - interval ‘24 hours’
+
+ANALYSIS (run all, in order):
+
+1. P&L ATTRIBUTION
+   By strategy: which generated alpha vs destroyed value?
+   By regime: did regime-tagged trades perform as expected?
+   By exchange: slippage comparison Binance vs HL vs Aster
+   By signal source: which research agent produced winning signals?
+1. SLIPPAGE ANALYSIS
+   requested_price vs fill_price at signal_time
+   If gap > 0.5%: pipeline latency problem — flag
+   Worst exchange for slippage today: log
+1. STRATEGY HEALTH SCORES (update rolling metrics)
+   7-day, 30-day, 90-day Sharpe per strategy
+   RETIREMENT FLAG if: 90-day Sharpe < 0.5
+   INCREASE FLAG if: 30-day Sharpe > 1.5 for 2 consecutive months
+   REVIEW FLAG if: win_rate < 30% with > 20 trades
+1. LLM COST REVIEW
+   SELECT sum(cost_usd) FROM llm_costs WHERE time > today
+   ALERT if: > $7.00 (70% of daily budget)
+   Identify highest-cost agent. Is it worth it? (Measured by signal quality)
+1. REGIME PERFORMANCE MATRIX
+   Update Graphiti with latest strategy × regime Sharpe measurements.
+
+OUTPUT JSON (publish to redis:evolution:daily_report):
+{
+“date”: str,
+“daily_pnl_usd”: float,
+“best_strategy”: str,
+“worst_strategy”: str,
+“regime_today”: str,
+“strategies_to_retire”: [str],
+“strategies_to_increase”: [str],
+“slippage_alert”: bool,
+“llm_cost_usd”: float,
+“signal_source_ranking”: [{agent, win_rate}],
+“key_insight”: str,
+“tomorrow_focus”: str
+}
+
+Send summary to CoPaw at 1:00 AM UTC.
+Update Mission Control agent dashboard via API.
+Store all facts in Mem0 memory for evolution context.
+
+```
+### Genetic Optimizer (DEAP) — Phase 4+
+
+```python
+# evolution/genetic_optimizer.py
+from deap import base, creator, tools, algorithms
+
+# Fitness: maximize Sharpe × Calmar, penalize drawdown
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))
+creator.create("Individual", list, fitness=creator.FitnessMax)
+
+class GeneticOptimizer:
+    POPULATION_SIZE = 200
+    GENERATIONS     = 50
+    CROSSOVER_PROB  = 0.7
+    MUTATION_PROB   = 0.2
+
+    def _fitness(self, individual: list) -> tuple:
+        params = self._decode(individual)
+        result = run_jesse_backtest(self.strategy, params,
+                                    slippage=0.004,    # Always conservative
+                                    quick=True)
+        score = (result.sharpe * result.calmar) / (1 + abs(result.max_drawdown))
+        return (score,)
+
+    def evolve(self) -> list:
+        toolbox = self._build_toolbox()
+        population = toolbox.population(n=self.POPULATION_SIZE)
+        final_pop, _ = algorithms.eaSimple(
+            population, toolbox,
+            cxpb=self.CROSSOVER_PROB, mutpb=self.MUTATION_PROB,
+            ngen=self.GENERATIONS, verbose=False,
+        )
+        return [self._decode(ind) for ind in tools.selBest(final_pop, k=5)]
+
+    # Efficiency note: run on conservative slippage ALWAYS
+    # Don't evolve parameters that only work at optimistic conditions
+```
+
+-----
+
+## 13. MISSION CONTROL
+
+### Setup (Fork + Add 3 Crypto Panels)
+
+```bash
+git clone https://github.com/builderz-labs/mission-control.git
+cd mission-control
+pnpm install
+cp .env.example .env
+# Set: AUTH_USER, AUTH_PASS, API_KEY, SWARM_API=http://localhost:8000
+
+# Add 3 crypto-specific panels on top of existing 28:
+```
+
+```typescript
+// dashboard/src/components/panels/EquityCurvePanel.tsx
+// Uses EvilCharts (legions-developer/evilcharts) on top of Mission Control
+import { AreaChart } from 'evilcharts'
+
+export function EquityCurvePanel() {
+  const { data } = useSwarmAPI('/api/portfolio/equity-curve')
+  return (
+    <Panel title="Portfolio Equity Curve">
+      <AreaChart
+        data={data}
+        xKey="time" yKey="equity_usd"
+        color="#00D4AA"
+        gradient={true}
+        animated={true}
+      />
+    </Panel>
+  )
+}
+
+// dashboard/src/components/panels/RegimePanel.tsx
+export function RegimePanel() {
+  const { data } = useSwarmAPI('/api/regime/current')
+  const colors = {
+    trending_up:    '#56D364',
+    trending_down:  '#FF7B7B',
+    mean_reverting: '#79C0FF',
+    high_volatility:'#F0E68C',
+    crash:          '#FF0000',
+  }
+  return (
+    <Panel title="Market Regime">
+      <RegimeBadge regime={data?.regime} color={colors[data?.regime]} />
+      <ConfidenceMeter value={data?.confidence} />
+      <AllocationBreakdown allocations={data?.strategy_allocation} />
+    </Panel>
+  )
+}
+
+// dashboard/src/components/panels/GateResultsPanel.tsx
+export function GateResultsPanel() {
+  const { data } = useSwarmAPI('/api/strategies/pending-validation')
+  return (
+    <Panel title="Backtest Pipeline">
+      <StrategyKanban
+        stages={['queued', 'gate1', 'gate2', 'gate3', 'gate4', 'gate5', 'gate6', 'paper', 'live']}
+        strategies={data}
+      />
+    </Panel>
+  )
+}
+```
+
+### Mission Control API Bridge
+
+```python
+# swarm-api: expose endpoints Mission Control reads
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/api/portfolio/equity-curve")
+def equity_curve():
+    return db.query("""
+        SELECT time, sum(realised_pnl) OVER (ORDER BY time) as equity_usd
+        FROM trades WHERE mode = 'live' ORDER BY time
+    """)
+
+@app.get("/api/regime/current")
+def current_regime():
+    return redis.get("regime:current")
+
+@app.get("/api/agents/status")
+def agent_status():
+    """Mission Control reads this for agent health panels."""
+    return {
+        agent: {
+            "last_heartbeat": redis.get(f"heartbeat:{agent}"),
+            "signals_today":  db.count_today("signals", agent_name=agent),
+            "status":         "healthy" if heartbeat_fresh(agent) else "stale"
+        }
+        for agent in REGISTERED_AGENTS
+    }
+
+@app.get("/api/costs/daily")
+def daily_llm_costs():
+    return db.query("""
+        SELECT agent, model, sum(cost_usd) as total_usd
+        FROM llm_costs
+        WHERE time > now() - interval '24 hours'
+        GROUP BY agent, model
+        ORDER BY total_usd DESC
+    """)
+```
+
+-----
+
+## 14. PHASED ROADMAP — EFFICIENCY-FIRST
+
+### Phase 0: Core Infrastructure (Week 1–2)
+
+**Goal:** Working vertical slice infrastructure. No agents yet.
+
+```bash
+# Checkpoint: all services healthy, data flowing
+docker compose up -d timescaledb redis qdrant neo4j sglang
+python -c "from mem0 import Memory; m = Memory(); m.add('test', user_id='test'); print('Mem0 OK')"
+python -c "from graphiti_core import Graphiti; print('Graphiti OK')"
+# Mission Control running at localhost:3000
+# TimescaleDB schemas applied
+# Qwen3.5 4B loaded at localhost:30000
+```
+
+**Checkpoint before Phase 1:**
+
+- `docker compose ps` — all green
+- Mem0.search() returns results
+- Mission Control shows agent registration endpoint working
+- SGLang inference < 3s per simple prompt
+
+-----
+
+### Phase 1: Vertical Slice (Week 3–8)
+
+**Goal:** One working loop. Market Scanner → Alpha Mining → Jesse → Paper Trade.
+
+```
+Week 3:  Market Scanner live. Signals in Redis. Mem0 stores context.
+Week 4:  Alpha Mining processes HIGH-priority signals. First hypothesis generated.
+Week 5:  Strategy Coder + Pine Script MCP. First Jesse code compiled.
+Week 6:  All 6 gates running. First strategy rejected (normal and expected).
+Week 7:  First strategy passes all gates. Paper trading starts on HL testnet.
+Week 8:  30-day paper observation period begins. Mission Control shows results.
+```
+
+**Do not proceed to Phase 2 until:**
+
+- At least 1 strategy in paper trading
+- Scanner generating 5+ signals/day with >= 65% confidence
+- LLM daily cost tracked and < $10/day
+- Dead Man’s Switch tested (kill risk monitor, confirm execution halts)
+
+-----
+
+### Phase 2: Research Swarm Complete (Week 9–12)
+
+**Goal:** Add Literature Agent, On-Chain Agent, Sentiment Agent.
+
+- Camoufox running for Literature Agent (academic sites)
+- On-Chain Agent monitoring whale wallets
+- Sentiment Agent as modifier signal source
+- Signal Aggregator weighting all sources
+
+**Checkpoint:** 10+ strategies through the pipeline (pass or fail). At least 2 in paper trading.
+
+-----
+
+### Phase 3: Full Execution + Risk (Week 13–17)
+
+**Goal:** First live capital. Small. Careful.
+
+- Smart Order Router tested on all 4 venues (paper mode)
+- Risk Monitor circuit breakers tested manually
+- Dead Man’s Switch confirmed in production
+- Mission Control equity curve visible
+- First live strategy: $500 allocation, one strategy only
+
+**Checkpoint before Phase 4:** 60 days live trading. At least 3 strategies live. No circuit breaker violations.
+
+-----
+
+### Phase 4: Evolution (Month 7+)
+
+**Goal:** System improves itself. Human review weekly.
+
+- DEAP running nightly on parameter space of live strategies
+- Graphiti has 6+ months of temporal strategy data
+- Letta activated for Evolution Swarm agent autonomy
+- Performance Analyst auto-retiring underperformers
+- Target: 10+ active strategies, portfolio Sharpe > 1.0
+
+-----
+
+### Phase 5: Scale (Month 12+)
+
+**Goal:** System is demonstrably profitable. Scale allocation.
+
+- 10+ live strategies, 6+ months each
+- Evolution Swarm generating candidates without human hypothesis input
+- Allocation decisions delegated to RegimeRouter within human-set limits
+- Polymarket Agent added as a low-weight macro modifier
+
+-----
+
+## 15. RISK FRAMEWORK
+
+### Position-Level
+
+```python
+POSITION_RULES = {
+    "max_risk_per_trade_pct":   2.0,   # % of portfolio risk per trade
+    "max_leverage":             10,    # hard cap regardless of exchange max
+    "require_stop_loss":        True,
+    "require_take_profit":      True,
+    "min_rr_ratio":             1.5,
+    "max_position_age_days":    14,    # auto-close positions held > 14 days
+    "max_single_loss_pct":      4.0,   # alert if single position -4% equity
+}
+```
+
+### Portfolio-Level
+
+```python
+PORTFOLIO_RULES = {
+    "max_concurrent_positions": 5,
+    "max_portfolio_heat_pct":   20.0,
+    "max_daily_drawdown_pct":   5.0,   # circuit breaker
+    "max_strategy_concentration": 30.0,
+    "max_single_exchange_pct":  70.0,
+    "cash_reserve_min_pct":     10.0,
+    "daily_llm_budget_usd":     10.0,
+}
+```
+
+### Circuit Breakers (Tiered)
+
+```
+L1 — WARNING (trading continues, CoPaw notification)
+  daily_dd > -3% OR heat > 15%
+  Action: reduce new position size 50%, send ⚠️ alert
+
+L2 — CAUTION (no new entries, hold existing)
+  daily_dd > -4% OR heat > 18%
+  Action: halt new entries, send 🔴 alert
+
+L3 — CIRCUIT BREAKER (full halt, existing positions held)
+  daily_dd > -5% OR heat > 20%
+  Action: publish HALT, send 🚨 alert, log to risk_events
+
+L4 — EMERGENCY (auto-close riskiest position)
+  daily_dd > -8% OR position approaching liquidation price
+  Action: close position nearest liquidation, send 💀 alert, require human review
+
+RELEASE CONDITIONS:
+  L1: automatically released when conditions resolve
+  L2: automatically released + human notification
+  L3: requires either: manual RESUME from operator, OR conditions resolve + 1h cooling period
+  L4: always requires human RESUME after review
+```
+
+### Strategy Lifecycle
+
+```python
+STRATEGY_RULES = {
+    "paper_min_days":           30,     # minimum paper trading before live
+    "paper_min_sharpe":         1.0,    # paper Sharpe to qualify for live
+    "live_initial_allocation":  500,    # USD — start small always
+    "scale_up_sharpe":          1.5,    # 30-day live Sharpe to double allocation
+    "retire_sharpe_90d":        0.5,    # auto-retire if 90-day Sharpe falls below
+    "retire_drawdown":          0.25,   # auto-retire if max DD exceeds 25%
+    "review_win_rate":          0.30,   # flag for human review if win rate < 30%
+}
+```
+
+-----
+
+## 16. DECISION LOG — EVERY MAJOR CALL EXPLAINED
+
+|Decision             |Choice                                    |Reason                                                                                                                                                   |
+|---------------------|------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
+|Dashboard            |Mission Control (fork) over custom Next.js|Saves 3 weeks. 28 panels on Day 1. MIT license.                                                                                                          |
+|Browser              |Camoufox + agent-browser (both)           |Camoufox for anti-bot sites (Cloudflare, DataDome). agent-browser for public pages. Don’t use heavy browser where lightweight works.                     |
+|Memory               |Mem0 + Graphiti over raw Neo4j Cypher     |Mem0: 3-line setup, auto fact extraction. Graphiti: temporal versioning we need for strategy evolution. Saves ~400 lines of extraction code.             |
+|Letta timing         |Phase 4+ only                             |Autonomous memory is powerful but requires baseline data. Activating too early produces noise.                                                           |
+|Polymarket           |Phase 4 optional                          |Alpha overstated for personal scale. Most obvious prediction market edges already arbitraged. Add as 0.1-weight modifier only.                           |
+|RL strategies (FinRL)|Phase 4 research track only               |RL requires huge training data, prone to overfitting, needs expensive compute. Not a primary strategy source.                                            |
+|Dual slippage        |Conservative mandatory                    |Every strategy MUST survive 0.4% slippage to advance. Real execution often hits this. Strategies that only work at 0.1% will fail live.                  |
+|Sensitivity gate     |Added as Gate 2                           |Without it, strategies with narrow parameter peaks pass fast screen but fail live when market shifts slightly. Cheap check, catches fragile optimization.|
+|DEAP timing          |Phase 4+, Month 8 serious                 |Running genetic optimization on 2 strategies is noise. Need 10+ live strategies with real P&L for meaningful signal.                                     |
+|Vertical slice       |Phase 1 is ONE end-to-end loop            |Adding agents before proving the core loop is how projects die. One path, proven. Then expand.                                                           |
+|Data quality gate    |Added before every backtest               |Missing candles and outliers silently corrupt backtest results. Catch this before wasting compute.                                                       |
+|Dead Man’s Switch    |Phase 1 — not optional                    |24/7 autonomous execution without a heartbeat-based halt is reckless. Takes 20 lines of code. No reason to skip.                                         |
+|LLM cost tracking    |Day 1 — not optional                      |You will discover an unexpected $300 bill without it. Paperclip + TimescaleDB logging = no surprises.                                                    |
+|DeerFlow isolation   |research_net only, no execution access    |DeerFlow makes HTTP calls during research. It must never be able to read execution env vars. Network-level isolation, not trust-level.                   |
+
+-----
+
+*Crypto Swarm — Master Plan v6.0 · March 2026*
+*Incorporates: v1–v5 research · Mission Control · Camoufox · Mem0+Graphiti · All efficiency suggestions*
+*Not financial advice · Personal use*
