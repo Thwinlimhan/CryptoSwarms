@@ -1,0 +1,3 @@
+[console_scripts]
+cryptoswarms-api = api.main:run
+cryptoswarms-jesse-entry = agents.backtest.jesse_entrypoint:main

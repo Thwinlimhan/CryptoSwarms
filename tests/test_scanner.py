@@ -39,6 +39,14 @@ class FakeStore:
         return self.data.get(key)
 
 
+class FakeMemory:
+    def __init__(self) -> None:
+        self.records: list[tuple[str, bool]] = []
+
+    def remember(self, text: str, important: bool = False) -> None:
+        self.records.append((text, important))
+
+
 def test_market_scanner_cycle_emits_multi_source_signals_and_heartbeat():
     sink = FakeSink()
     store = FakeStore()
@@ -53,3 +61,15 @@ def test_market_scanner_cycle_emits_multi_source_signals_and_heartbeat():
     assert "REGIME" in signal_types
     assert "heartbeat:market_scanner" in store.data
     assert len(sink.events) == len(signals)
+
+
+def test_market_scanner_writes_memory_records():
+    sink = FakeSink()
+    store = FakeStore()
+    memory = FakeMemory()
+    runner = MarketScannerCycleRunner(FakeDataSource(), sink, store, memory_recorder=memory)
+
+    signals = runner.run_cycle(now=datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc))
+
+    assert len(memory.records) == len(signals)
+    assert any("BREAKOUT" in text for text, _ in memory.records)

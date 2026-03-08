@@ -1,0 +1,126 @@
+
+
+services:
+  # ── DATABASES ─────────────────────────────────────────────────
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_DB: swarm_db
+      POSTGRES_USER: swarm
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./data/schemas:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+
+  # ── LOCAL LLM ─────────────────────────────────────────────────
+  sglang:
+    image: lmsysorg/sglang:latest
+    runtime: nvidia
+    command: >
+      python -m sglang.launch_server
+      --model-path Qwen/Qwen2.5-VL-7B-Instruct
+      --port 30000 --mem-fraction-static 0.88
+    ports:
+      - "30000:30000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+
+  # ── CAMOUFOX REST SERVER ───────────────────────────────────────
+  camoufox:
+    image: ghcr.io/redf0x1/camofox-browser:latest
+    environment:
+      CAMOFOX_MAX_SESSIONS: 20
+      # DEFAULT_GEO is now handled via presets or search macros
+    ports:
+      - "8080:9377"
+    networks:
+      - research_net
+
+  # ── SWARM CORE ────────────────────────────────────────────────
+  swarm-api:
+    build: ./agents
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+      DB_URL: postgresql://swarm:${DB_PASSWORD}@timescaledb:5432/swarm_db
+      NEO4J_URL: bolt://neo4j:7687
+      QDRANT_URL: http://qdrant:6333
+      SGLANG_URL: http://sglang:30000
+      CAMOUFOX_URL: http://camoufox:8080
+      LANGCHAIN_TRACING_V2: ${LANGCHAIN_TRACING_V2}
+      LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
+      LANGCHAIN_PROJECT: ${LANGCHAIN_PROJECT}
+    depends_on:
+      - redis
+      - timescaledb
+      - neo4j
+      - qdrant
+      - sglang
+    ports:
+      - "8000:8000"
+    networks:
+      - research_net
+      - execution_net
+
+  # ── MISSION CONTROL ────────────────────────────────────────────
+  mission-control:
+    build: ./mission-control-upstream
+    environment:
+      AUTH_USER: ${MC_USER}
+      AUTH_PASS: ${MC_PASS}
+      API_KEY: ${MC_API_KEY}
+      MC_ALLOWED_HOSTS: localhost,127.0.0.1
+      MISSION_CONTROL_DATA_DIR: /app/.data
+      NEXT_PUBLIC_GATEWAY_HOST: swarm-api
+      NEXT_PUBLIC_GATEWAY_PORT: 8000
+      NEXT_PUBLIC_GATEWAY_PROTOCOL: ws
+    ports:
+      - "3000:3000"
+    volumes:
+      - mission_control_data:/app/.data
+
+  # ── OBSERVABILITY ─────────────────────────────────────────────
+  deepflow-agent:
+    image: deepflowce/deepflow-agent:latest
+    privileged: true
+    network_mode: host
+    volumes:
+      - /sys/kernel/debug:/sys/kernel/debug:ro
+      - /proc:/proc:ro
+
+networks:
+  research_net:
+  execution_net:
+
+volumes:
+  timescale_data:
+  qdrant_data:
+  neo4j_data:
+  mission_control_data:
+

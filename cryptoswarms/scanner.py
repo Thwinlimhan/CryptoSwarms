@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
 
+from memory.runtime_memory import MemoryRecorder, NullMemoryRecorder
 from .storage import HeartbeatRecord, KeyValueStore, set_heartbeat
 
 
@@ -39,11 +40,13 @@ class MarketScannerCycleRunner:
         sink: SignalSink,
         heartbeat_store: KeyValueStore,
         config: ScannerConfig = ScannerConfig(),
+        memory_recorder: MemoryRecorder | None = None,
     ) -> None:
         self._data_source = data_source
         self._sink = sink
         self._heartbeat_store = heartbeat_store
         self._config = config
+        self._memory = memory_recorder or NullMemoryRecorder()
 
     def run_cycle(self, now: datetime | None = None) -> list[dict[str, object]]:
         now = now or datetime.now(timezone.utc)
@@ -102,4 +105,8 @@ class MarketScannerCycleRunner:
             "suggested_hypothesis": f"{signal_type} candidate for {symbol}",
         }
         self._sink.publish("research:signals", payload)
+        self._memory.remember(
+            f"scanner signal={signal_type} symbol={symbol} priority={priority} confidence={payload['confidence']}",
+            important=(priority == "HIGH"),
+        )
         return payload

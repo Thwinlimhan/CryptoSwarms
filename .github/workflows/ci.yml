@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest
+      - name: Lint (compile check)
+        run: |
+          python -m py_compile api/main.py cryptoswarms/*.py agents/backtest/*.py agents/execution/*.py scripts/check_backtest_runtimes.py
+      - name: Unit tests
+        run: |
+          python -m pytest -q
+
+  backtest-runtimes:
+    runs-on: ubuntu-latest
+    env:
+      REQUIRE_BACKTEST_RUNTIMES: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install backtest dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[backtest]
+          pip install pytest
+      - name: Verify strict runtime availability
+        run: |
+          python scripts/check_backtest_runtimes.py
+      - name: Run strict backtest integration tests
+        run: |
+          python -m pytest -q tests/integration/test_vectorbt_integration.py tests/integration/test_jesse_integration.py

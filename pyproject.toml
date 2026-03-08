@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cryptoswarms"
+version = "0.1.0"
+description = "Baseline service layout for CryptoSwarms"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "pydantic>=2.7.0",
+  "pydantic-settings>=2.4.0",
+  "redis>=5.0.0",
+  "asyncpg>=0.29.0",
+  "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+backtest = [
+  "numpy>=1.26.0",
+  "pandas>=2.2.0",
+  "vectorbt>=0.26.0",
+  "jesse>=1.7.0",
+]
+memory = [
+  "mem0ai>=0.1.0",
+  "graphiti-core>=0.3.0",
+]
+
+[project.scripts]
+cryptoswarms-api = "api.main:run"
+cryptoswarms-jesse-entry = "agents.backtest.jesse_entrypoint:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cryptoswarms*", "agents*", "memory*", "infra*", "api*", "schemas*"]
+

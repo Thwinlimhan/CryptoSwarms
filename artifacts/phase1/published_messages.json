@@ -1,0 +1,56 @@
+[
+  {
+    "topic": "research:signals",
+    "payload": {
+      "signal_type": "BREAKOUT",
+      "symbol": "BTCUSDT",
+      "confidence": 0.65,
+      "priority": "HIGH",
+      "data": {
+        "source": "scanner_breakout"
+      },
+      "suggested_hypothesis": "BREAKOUT candidate for BTCUSDT"
+    }
+  },
+  {
+    "topic": "research:signals",
+    "payload": {
+      "signal_type": "FUNDING_LONG_SQUEEZE",
+      "symbol": "ETHUSDT",
+      "confidence": 0.65,
+      "priority": "MEDIUM",
+      "data": {
+        "source": "scanner_funding"
+      },
+      "suggested_hypothesis": "FUNDING_LONG_SQUEEZE candidate for ETHUSDT"
+    }
+  },
+  {
+    "topic": "research:signals",
+    "payload": {
+      "signal_type": "SMART_MONEY",
+      "symbol": "SOLUSDT",
+      "confidence": 0.65,
+      "priority": "HIGH",
+      "data": {
+        "source": "scanner_smart_money",
+        "inflow_usd": 1500000.0
+      },
+      "suggested_hypothesis": "SMART_MONEY candidate for SOLUSDT"
+    }
+  },
+  {
+    "topic": "research:signals",
+    "payload": {
+      "signal_type": "REGIME",
+      "symbol": "BTCUSDT",
+      "confidence": 0.65,
+      "priority": "HIGH",
+      "data": {
+        "source": "scanner_regime",
+        "regime": "trending_up"
+      },
+      "suggested_hypothesis": "REGIME candidate for BTCUSDT"
+    }
+  }
+]

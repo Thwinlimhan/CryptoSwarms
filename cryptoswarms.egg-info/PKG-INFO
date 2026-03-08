@@ -1,0 +1,66 @@
+Metadata-Version: 2.4
+Name: cryptoswarms
+Version: 0.1.0
+Summary: Baseline service layout for CryptoSwarms
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: pydantic-settings>=2.4.0
+Requires-Dist: redis>=5.0.0
+Requires-Dist: asyncpg>=0.29.0
+Requires-Dist: uvicorn>=0.30.0
+Provides-Extra: backtest
+Requires-Dist: numpy>=1.26.0; extra == "backtest"
+Requires-Dist: pandas>=2.2.0; extra == "backtest"
+Requires-Dist: vectorbt>=0.26.0; extra == "backtest"
+Requires-Dist: jesse>=1.7.0; extra == "backtest"
+Provides-Extra: memory
+Requires-Dist: mem0ai>=0.1.0; extra == "memory"
+Requires-Dist: graphiti-core>=0.3.0; extra == "memory"
+
+# CryptoSwarms
+
+Phase-oriented implementation scaffold for `Crypto swarm v6`.
+
+## Current status
+
+- Phase 0: infrastructure scaffold in place (compose, env template, CI, task runner).
+- Phase 1: vertical slice includes scanner loop, runtime adapters, and paper promotion report job.
+- Phase 2+: core checklist tracked in `docs/MASTER_IMPLEMENTATION_CHECKLIST_V6.md`.
+
+## Project layout
+
+- `cryptoswarms/`: core orchestration domain modules.
+- `agents/`: swarm agents grouped by domain (`research`, `backtest`, `execution`, `evolution`).
+- `api/`: FastAPI service and health/bridge endpoints.
+- `infra/`: infrastructure and schema assets.
+- `data/schemas/`: TimescaleDB bootstrap SQL.
+- `memory/`: Mem0 + Graphiti integration and memory-quality utilities.
+- `strategies/`: strategy hypotheses and candidate definitions.
+- `scripts/`: operational scripts for phased runs.
+- `docs/`: phase plans and operational notes.
+- `tests/`: unit + integration tests.
+- `mission-control-upstream/`: cloned upstream Mission Control dashboard.
+
+## Local setup (Windows)
+
+```powershell
+C:\Users\thwin\AppData\Local\Programs\Python\Python313\python.exe -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e . pytest
+```
+
+## Common commands
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe scripts\run_phase1_smoke.py
+.\.venv\Scripts\python.exe scripts\run_phase1_loop.py
+.\.venv\Scripts\python.exe scripts\run_paper_ledger_job.py
+.\.venv\Scripts\python.exe scripts\run_research_camoufox.py
+docker compose up -d mission-control swarm-api redis timescaledb
+```
+
+## Verification
+
+Latest local test run: **58 passed, 2 skipped**.

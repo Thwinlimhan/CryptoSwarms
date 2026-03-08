@@ -1,0 +1,12 @@
+id: phase1-btc-breakout-15m
+market: BTCUSDT
+timeframe: 15m
+signal_source: scanner_breakout
+entry: close > 20-period high
+exit:
+  stop_loss_atr_mult: 1.8
+  take_profit_rr: 2.0
+risk:
+  max_risk_pct: 2.0
+  max_open_positions: 5
+notes: Baseline vertical-slice hypothesis from Crypto Swarm v6 Phase 1.

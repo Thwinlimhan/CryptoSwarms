@@ -13,6 +13,9 @@ class RedisKeyValueStore:
     def set(self, key: str, value: str) -> None:
         self.client.set(key, value)
 
+    def setex(self, key: str, ttl_seconds: int, value: str) -> None:
+        self.client.setex(key, ttl_seconds, value)
+
     def get(self, key: str) -> str | None:
         value = self.client.get(key)
         if value is None:

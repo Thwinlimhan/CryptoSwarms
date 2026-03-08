@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
+
+from cryptoswarms.tracing import LlmTraceEvent, emit_langsmith_trace
 
 
 class SqlExecutor(Protocol):
@@ -34,13 +37,26 @@ def ensure_costs_schema(db: SqlExecutor) -> None:
     db.execute(costs_schema_sql())
 
 
-def write_llm_cost(db: SqlExecutor, event: LlmCostEvent) -> None:
+def write_llm_cost(db: SqlExecutor, event: LlmCostEvent, trace_env: dict[str, str] | None = None) -> None:
     ts = event.timestamp
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
     db.execute(
         "INSERT INTO llm_costs(time, agent, model, cost_usd) VALUES (%s, %s, %s, %s)",
         (ts, event.agent, event.model, float(event.cost_usd)),
+    )
+
+    emit_langsmith_trace(
+        LlmTraceEvent(
+            time=ts,
+            agent=event.agent,
+            model=event.model,
+            prompt_tokens=0,
+            completion_tokens=0,
+            cost_usd=float(event.cost_usd),
+            metadata={"source": "llm_costs"},
+        ),
+        env=trace_env or dict(os.environ),
     )
 
 

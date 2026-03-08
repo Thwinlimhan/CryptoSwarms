@@ -1,0 +1,16 @@
+fastapi>=0.115.0
+pydantic>=2.7.0
+pydantic-settings>=2.4.0
+redis>=5.0.0
+asyncpg>=0.29.0
+uvicorn>=0.30.0
+
+[backtest]
+numpy>=1.26.0
+pandas>=2.2.0
+vectorbt>=0.26.0
+jesse>=1.7.0
+
+[memory]
+mem0ai>=0.1.0
+graphiti-core>=0.3.0

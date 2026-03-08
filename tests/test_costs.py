@@ -21,8 +21,16 @@ class FakeDB:
         return self.rows
 
 
-def test_schema_and_write_cost():
+def test_schema_and_write_cost(monkeypatch):
     db = FakeDB()
+    seen: dict[str, object] = {}
+
+    def fake_emit(event, env):
+        seen["agent"] = event.agent
+        return True
+
+    monkeypatch.setattr("cryptoswarms.costs.emit_langsmith_trace", fake_emit)
+
     ensure_costs_schema(db)
     write_llm_cost(
         db,
@@ -32,10 +40,12 @@ def test_schema_and_write_cost():
             model="qwen3.5-4b-local",
             cost_usd=0.0,
         ),
+        trace_env={"LANGCHAIN_TRACING_V2": "true", "LANGCHAIN_API_KEY": "k", "LANGCHAIN_PROJECT": "p"},
     )
 
     assert "CREATE TABLE IF NOT EXISTS llm_costs" in db.commands[0][0]
     assert "INSERT INTO llm_costs" in db.commands[1][0]
+    assert seen["agent"] == "scanner"
 
 
 def test_read_daily_totals_transforms_rows():
@@ -47,6 +57,5 @@ def test_read_daily_totals_transforms_rows():
 
     assert result[0]["agent"] == "scanner"
     assert result[1]["total_usd"] == 0.8
-    # ensure a lookback cutoff is passed into the query
     cutoff = db.commands[-1][1][0]
     assert cutoff == now - timedelta(hours=24)
