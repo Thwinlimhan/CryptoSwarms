@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from agents.backtest.models import StrategyCandidate
+from cryptoswarms.immutable_artifacts import write_immutable_json
 
 
 @dataclass(frozen=True)
@@ -102,8 +103,8 @@ def export_candidate_report(
     sweep_results: list[SweepResult],
     stress_results: list[StressResult],
     decision: CandidateDecision,
+    immutable: bool = True,
 ) -> Path:
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "strategy_id": strategy_id,
         "top_results": [
@@ -118,5 +119,9 @@ def export_candidate_report(
         "stress_results": [{"slippage": r.slippage, "sharpe": r.sharpe, "passed": r.passed} for r in stress_results],
         "decision": {"accepted": decision.accepted, "reasons": decision.reasons},
     }
-    out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    if immutable:
+        write_immutable_json(out_path, payload)
+    else:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return out_path

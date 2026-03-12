@@ -5,6 +5,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from agents.backtest.institutional_gate import InstitutionalBenchmark, evaluate_institutional_benchmark
+from cryptoswarms.base_rate_registry import default_base_rate_registry
+from cryptoswarms.decision_engine import BinaryDecisionInput, evaluate_binary_decision
+from cryptoswarms.fractional_kelly import empirical_fractional_kelly, position_size_from_bankroll
 from cryptoswarms.paper_trading import (
     PaperTrade,
     PromotionScorecardPolicy,
@@ -57,6 +60,32 @@ def main() -> None:
         )
     )
 
+    base_rates = default_base_rate_registry()
+    prior = base_rates.empirical_bayes_prior(summary.strategy_id, fallback=0.52, pseudo_count=30)
+    likelihood_if_true = min(0.9, 0.55 + max(0.0, summary.oos_stability_ratio) * 0.2)
+    likelihood_if_false = max(0.1, 0.45 - max(0.0, summary.oos_stability_ratio - 0.6) * 0.1)
+
+    decision = evaluate_binary_decision(
+        BinaryDecisionInput(
+            prior_probability=prior,
+            likelihood_if_true=likelihood_if_true,
+            likelihood_if_false=likelihood_if_false,
+            payoff_win_usd=100.0,
+            payoff_loss_usd=-80.0,
+            fees_usd=3.0,
+            slippage_usd=2.0,
+        )
+    )
+
+    kelly_fraction = empirical_fractional_kelly(
+        win_probability=decision.posterior_probability,
+        payoff_multiple=1.0,
+        uncertainty_cv=0.35,
+        kelly_fraction_multiplier=0.5,
+        max_fraction=0.2,
+    )
+    suggested_notional_usd = position_size_from_bankroll(bankroll_usd=50000.0, fraction=kelly_fraction)
+
     out_dir = Path("artifacts") / "phase1"
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -86,6 +115,19 @@ def main() -> None:
         "institutional_gate": {
             "accepted": institutional.accepted,
             "reasons": institutional.reasons,
+        },
+        "decision_math": {
+            "base_rate_prior": round(prior, 6),
+            "posterior_probability": decision.posterior_probability,
+            "expected_value_usd": decision.expected_value_usd,
+            "expected_value_after_costs_usd": decision.expected_value_after_costs_usd,
+            "costs_usd": decision.costs_usd,
+            "positive_edge": decision.positive_edge,
+        },
+        "sizing": {
+            "kelly_fraction": kelly_fraction,
+            "suggested_notional_usd": suggested_notional_usd,
+            "bankroll_usd": 50000.0,
         },
     }
     out_path = out_dir / "paper_promotion_report.json"

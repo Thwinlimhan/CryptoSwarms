@@ -1,0 +1,151 @@
+:root {
+  /* White Terminal Aesthetic */
+  --bg-primary: #000000;
+  --bg-panel: #0a0a0a;
+  --bg-panel-border: #222222;
+  --bg-highlight: #111111;
+  
+  --text-primary: #ffffff; /* White Text */
+  --text-primary-glow: rgba(255, 255, 255, 0.2);
+  --text-secondary: #aaaaaa;
+  --text-muted: #444444;
+  
+  --accent-alert: #ff0000;
+  --accent-warn: #fbbf24;
+  --accent-info: #ffffff;
+  --accent-purple: #ffffff;
+  --accent-pink: #ffffff;
+  --accent-cyan: #ffffff;
+  --accent-gold: #fbbf24;
+
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', 'Courier New', Courier, monospace;
+  
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --premium-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  min-width: 100vw;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  -webkit-font-smoothing: none;
+  overflow-x: hidden;
+}
+
+/* Base Typography */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  text-shadow: 0 0 2px var(--text-primary-glow);
+}
+
+a {
+  color: var(--text-primary);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+a:hover {
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+button {
+  background-color: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--text-secondary);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: inset 0 0 0 0 var(--text-primary);
+}
+
+button:hover {
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+  box-shadow: inset 0 0 10px 0 var(--text-primary-glow);
+}
+
+button:focus {
+  outline: 1px solid var(--text-primary);
+  outline-offset: 2px;
+}
+
+/* Terminal input aesthetic */
+input, textarea, select {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--text-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  padding: 0.5rem;
+  width: 100%;
+}
+
+input:focus, textarea:focus {
+  outline: none;
+  border-color: var(--text-primary);
+  box-shadow: 0 0 5px var(--text-primary-glow);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-panel-border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Special utility classes */
+.text-danger { color: var(--accent-alert); text-shadow: 0 0 2px rgba(255, 0, 60, 0.5); }
+.text-warn { color: var(--accent-warn); text-shadow: 0 0 2px rgba(255, 176, 0, 0.5); }
+.text-info { color: var(--accent-info); text-shadow: 0 0 2px rgba(0, 229, 255, 0.5); }
+.text-purple { color: var(--accent-purple); text-shadow: 0 0 2px rgba(168, 85, 247, 0.5); }
+.text-pink { color: var(--accent-pink); text-shadow: 0 0 2px rgba(236, 72, 153, 0.5); }
+.text-cyan { color: var(--accent-cyan); text-shadow: 0 0 2px rgba(6, 182, 212, 0.5); }
+.text-gold { color: var(--accent-gold); text-shadow: 0 0 2px rgba(251, 191, 36, 0.5); }
+.text-muted { color: var(--text-muted); }
+
+.bg-purple { background-color: rgba(168, 85, 247, 0.1); border: 1px solid var(--accent-purple); }
+.bg-pink { background-color: rgba(236, 72, 153, 0.1); border: 1px solid var(--accent-pink); }
+.bg-cyan { background-color: rgba(6, 182, 212, 0.1); border: 1px solid var(--accent-cyan); }
+.bg-gold { background-color: rgba(251, 191, 36, 0.1); border: 1px solid var(--accent-gold); }
+
+.border-box {
+  border: 1px solid var(--text-secondary);
+  padding: 1rem;
+  background-color: rgba(0, 255, 65, 0.02);
+}
+
+.blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}

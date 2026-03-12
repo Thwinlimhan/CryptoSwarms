@@ -1,0 +1,108 @@
+{
+  "nodes": [
+    {
+      "node_id": "b89df1ce7435",
+      "node_type": "research_hypothesis",
+      "topic": "phase1-btc-breakout-15m",
+      "content": "Bitcoin breakout as ETF inflow rises | sentiment=positive:0.67 | prior=0.55->post=0.80 | ev_net=11.78 | docs=book-advances-finml,paper-momentum-regimes,paper-execution-impact | mem_ctx=0",
+      "created_at": "2026-03-09T04:41:59.740182+00:00",
+      "metadata": {
+        "hypothesis_id": "c0efbaa0e7fb",
+        "symbol": "BTCUSDT",
+        "source_url": "https://example.com/bitcoin-breakout",
+        "confidence": 0.7952,
+        "posterior_probability": 0.7952,
+        "expected_value_after_costs_usd": 11.7849
+      }
+    },
+    {
+      "node_id": "28e00f264109",
+      "node_type": "research_hypothesis",
+      "topic": "phase1-btc-breakout-15m",
+      "content": "Bitcoin breakout as ETF inflow rises | sentiment=positive:0.67 | prior=0.55->post=0.80 | ev_net=11.78 | docs=book-advances-finml,paper-momentum-regimes,paper-execution-impact | mem_ctx=1",
+      "created_at": "2026-03-09T04:42:07.969432+00:00",
+      "metadata": {
+        "hypothesis_id": "c0efbaa0e7fb",
+        "symbol": "BTCUSDT",
+        "source_url": "https://example.com/bitcoin-breakout",
+        "confidence": 0.7952,
+        "posterior_probability": 0.7952,
+        "expected_value_after_costs_usd": 11.7849
+      }
+    },
+    {
+      "node_id": "c9c134301631",
+      "node_type": "decision_checkpoint",
+      "topic": "default::phase1-btc-breakout-15m",
+      "content": "decision=go conf=1.000 dissent=0.000 reason=governor passed",
+      "created_at": "2026-03-12T13:50:06.203241+00:00",
+      "metadata": {
+        "project_id": "default",
+        "strategy_id": "phase1-btc-breakout-15m",
+        "passed_governor": true,
+        "stages": [
+          "project_scope_strategy",
+          "project_scope_secrets",
+          "input_guardrail",
+          "dag_recall",
+          "mcp_registry_guard",
+          "tool_guardrail",
+          "a2a_delegation_guard",
+          "debate_attempt_1",
+          "output_guardrail",
+          "governor_gate"
+        ],
+        "aggregate": {
+          "decision": "go",
+          "confidence": 1.0,
+          "dissent_ratio": 0.0,
+          "vote_count": 3
+        },
+        "provenance_confidence": 1.0,
+        "age_hours": 0.0
+      }
+    },
+    {
+      "node_id": "9b42f7b58a98",
+      "node_type": "decision_checkpoint",
+      "topic": "default::phase1-btc-breakout-15m",
+      "content": "decision=go conf=1.000 dissent=0.000 reason=governor passed",
+      "created_at": "2026-03-12T13:50:06.243351+00:00",
+      "metadata": {
+        "project_id": "default",
+        "strategy_id": "phase1-btc-breakout-15m",
+        "passed_governor": true,
+        "stages": [
+          "project_scope_strategy",
+          "project_scope_secrets",
+          "input_guardrail",
+          "dag_recall",
+          "mcp_registry_guard",
+          "tool_guardrail",
+          "a2a_delegation_guard",
+          "debate_attempt_1",
+          "output_guardrail",
+          "governor_gate"
+        ],
+        "aggregate": {
+          "decision": "go",
+          "confidence": 1.0,
+          "dissent_ratio": 0.0,
+          "vote_count": 3
+        },
+        "provenance_confidence": 1.0,
+        "age_hours": 0.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from_node_id": "b89df1ce7435",
+      "to_node_id": "28e00f264109"
+    },
+    {
+      "from_node_id": "c9c134301631",
+      "to_node_id": "9b42f7b58a98"
+    }
+  ]
+}

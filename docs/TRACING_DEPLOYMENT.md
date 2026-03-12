@@ -16,3 +16,17 @@ Environment variables:
 - `LANGCHAIN_PROJECT`
 - `DEEPFLOW_HOST` (default `localhost`)
 - `DEEPFLOW_PORT` (default `20035`)
+- `DEEPFLOW_ENABLED` (`true` only when DeepFlow stack is running)
+
+
+Run DeepFlow config preflight before compose:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_deepflow_preflight.py
+```
+DeepFlow compose wiring:
+- `deepflow-server` and `deepflow-agent` are under the `observability` profile.
+- Start with: `docker compose --profile observability up -d deepflow-server deepflow-agent`
+- If you do not run DeepFlow, leave profile disabled and keep `DEEPFLOW_ENABLED=false`.
+
+

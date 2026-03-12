@@ -7,6 +7,7 @@ from agents.execution.execution_agent import (
     ExchangeExecutionError,
     ExecutionAgent,
     ExecutionConfig,
+    ExecutionSizingPolicy,
     GateCheckError,
     OrderRequest,
     RiskSnapshot,
@@ -103,3 +104,37 @@ def test_live_adapter_accepts_valid_short_bounds():
     )
 
     assert result["status"] == "accepted"
+
+
+def test_fractional_kelly_sizing_scales_down_quantity_when_enabled():
+    now = datetime(2026, 3, 8, 12, 0, tzinfo=timezone.utc)
+    agent = ExecutionAgent(
+        exchange_adapter=BinanceExchangeAdapter(mode="paper"),
+        event_publisher=StubPublisher(),
+        confirm_gate=StubConfirmGate(),
+        config=ExecutionConfig(
+            sizing_policy=ExecutionSizingPolicy(
+                enabled=True,
+                kelly_fraction_multiplier=0.5,
+                uncertainty_cv=0.35,
+                max_position_fraction=0.2,
+                min_quantity=0.001,
+            )
+        ),
+    )
+
+    result = agent.execute(
+        signal=_signal(now),
+        risk=_risk(now),
+        confirm_token="valid",
+        action_record_id="a-sizing",
+        stop_loss=59000,
+        take_profit=62000,
+        entry_price=60000,
+        now=now,
+    )
+
+    assert result["sizing"]["enabled"] is True
+    assert result["quantity"] <= 0.1
+    assert result["sizing"]["executed_quantity"] == result["quantity"]
+    assert result["sizing"]["kelly_fraction"] > 0.0

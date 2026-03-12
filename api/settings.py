@@ -9,7 +9,10 @@ class Settings(BaseSettings):
 
     app_name: str = "CryptoSwarms API"
     environment: str = "local"
-
+    api_host: str = Field(default="0.0.0.0", alias="API_HOST")
+    api_port: int = Field(default=8000, alias="API_PORT")
+    ssl_certfile: str = Field(default="", alias="SSL_CERTFILE")
+    ssl_keyfile: str = Field(default="", alias="SSL_KEYFILE")
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
 
     timescaledb_host: str = Field(default="localhost", alias="TIMESCALEDB_HOST")

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from agents.backtest.models import StrategyCandidate
 from agents.backtest.production import decide_candidate, export_candidate_report, parameter_sweep, slippage_stress_test
 
@@ -40,3 +42,22 @@ def test_export_candidate_report_writes_file(tmp_path: Path):
         decision=decide_candidate(best_sharpe=1.2, worst_drawdown=0.1, stress_results=[]),
     )
     assert out.exists()
+
+
+def test_export_candidate_report_blocks_non_idempotent_overwrite(tmp_path: Path):
+    path = tmp_path / "report.json"
+    export_candidate_report(
+        out_path=path,
+        strategy_id="s1",
+        sweep_results=[],
+        stress_results=[],
+        decision=decide_candidate(best_sharpe=1.2, worst_drawdown=0.1, stress_results=[]),
+    )
+    with pytest.raises(FileExistsError):
+        export_candidate_report(
+            out_path=path,
+            strategy_id="s2",
+            sweep_results=[],
+            stress_results=[],
+            decision=decide_candidate(best_sharpe=1.2, worst_drawdown=0.1, stress_results=[]),
+        )

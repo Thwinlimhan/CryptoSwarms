@@ -1,0 +1,6 @@
+# DeepFlow Agent config (CE)
+# Update controller-ips and vtap-group-id-request for your deployment.
+# Reference: https://deepflow.io/docs/ce-install/agent/
+controller-ips:
+  - 127.0.0.1
+vtap-group-id-request: g-cryptoswarms

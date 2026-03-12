@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from agents.research.deerflow_pipeline import StaticNewsConnector
 from agents.research.research_factory import KnowledgeBase, KnowledgeDocument, ResearchFactory
 from agents.research.stack_profiles import recommended_stack_profiles
+from cryptoswarms.memory_dag import MemoryDag
 
 
 class PrintQueue:
@@ -46,13 +48,18 @@ def build_knowledge_base() -> KnowledgeBase:
 
 def main() -> None:
     queue = PrintQueue()
+    dag_path = Path("data") / "agent_memory_dag.json"
+    memory_dag = MemoryDag.load_json(dag_path)
+
     factory = ResearchFactory(
         connectors=[StaticNewsConnector()],
         knowledge_base=build_knowledge_base(),
         queue=queue,
         strategy_universe=("phase1-btc-breakout-15m",),
+        memory_dag=memory_dag,
     )
     report = factory.run(symbol="BTCUSDT", max_hypotheses=5, now=datetime.now(timezone.utc))
+    memory_dag.save_json(dag_path)
 
     print("\n=== Factory run summary ===")
     print(
@@ -71,6 +78,11 @@ def main() -> None:
                     }
                     for req in report.backtest_requests
                 ],
+                "memory": {
+                    "path": str(dag_path),
+                    "node_count": len(memory_dag.nodes()),
+                    "edge_count": len(memory_dag.edges()),
+                },
                 "stack_profiles": [
                     {"name": p.name, "status": p.integration_status, "priority": p.priority}
                     for p in recommended_stack_profiles()
@@ -83,3 +95,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

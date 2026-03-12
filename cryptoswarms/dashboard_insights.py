@@ -11,6 +11,7 @@ class DashboardInsightInput:
     trade_rows: Sequence[Mapping[str, object]]
     validation_rows: Sequence[Mapping[str, object]]
     signal_rows: Sequence[Mapping[str, object]]
+    attribution_rows: Sequence[Mapping[str, object]]
     regime: Mapping[str, object]
     risk_event: Mapping[str, object] | None
 
@@ -26,6 +27,7 @@ def build_dashboard_insights(payload: DashboardInsightInput) -> dict[str, object
 
     validation_stats = _compute_validation_stats(validation_outcomes)
     signal_stats = _compute_signal_stats(signal_conf, signal_acted)
+    attribution_stats = _compute_attribution_stats(payload.attribution_rows)
 
     risk_summary = {
         "latest_level": int(payload.risk_event.get("level", 0)) if payload.risk_event else 0,
@@ -36,12 +38,14 @@ def build_dashboard_insights(payload: DashboardInsightInput) -> dict[str, object
     }
 
     insights = _build_operator_insights(
+        trade_count=trade_stats["trades"],
         total_pnl=trade_stats["total_pnl_usd"],
         max_drawdown=trade_stats["max_drawdown_usd"],
         win_rate=trade_stats["win_rate"],
         validation_pass_rate=validation_stats["pass_rate"],
         avg_slippage_bps=trade_stats["avg_slippage_bps"],
         acted_ratio=signal_stats["acted_ratio"],
+        attribution_coverage=attribution_stats["coverage_ratio"],
         risk_level=risk_summary["latest_level"],
     )
 
@@ -50,6 +54,7 @@ def build_dashboard_insights(payload: DashboardInsightInput) -> dict[str, object
         "trade_stats": trade_stats,
         "validation_stats": validation_stats,
         "signal_stats": signal_stats,
+        "attribution_stats": attribution_stats,
         "regime": {
             "name": str(payload.regime.get("regime", "unknown")),
             "confidence": round(_to_float(payload.regime.get("confidence")), 4),
@@ -119,17 +124,39 @@ def _compute_signal_stats(confidences: Sequence[float], acted: Sequence[bool]) -
     }
 
 
+def _compute_attribution_stats(rows: Sequence[Mapping[str, object]]) -> dict[str, float | int]:
+    total = len(rows)
+    traced = 0
+    for row in rows:
+        if all(
+            isinstance(row.get(k), str) and str(row.get(k)).strip()
+            for k in ("hypothesis_id", "optimizer_run_id", "optimizer_candidate_id")
+        ):
+            traced += 1
+    return {
+        "total": total,
+        "traced": traced,
+        "coverage_ratio": round((traced / total), 4) if total else 0.0,
+    }
+
+
 def _build_operator_insights(
     *,
+    trade_count: int,
     total_pnl: float,
     max_drawdown: float,
     win_rate: float,
     validation_pass_rate: float,
     avg_slippage_bps: float,
     acted_ratio: float,
+    attribution_coverage: float,
     risk_level: int,
 ) -> list[str]:
     items: list[str] = []
+
+    if trade_count == 0:
+        items.append("No live trade data is available for the lookback window. Treat dashboard PnL and drawdown as unavailable.")
+        return items
 
     if total_pnl <= 0:
         items.append("PnL is non-positive for the lookback window. Tighten promotion gates before scaling exposure.")
@@ -144,6 +171,9 @@ def _build_operator_insights(
 
     if validation_pass_rate < 0.6:
         items.append("Validation pass-rate is below 60%. Investigate gate failures before admitting new strategies.")
+
+    if attribution_coverage < 0.95:
+        items.append("Attribution coverage is below 95%. Block live scaling until all trades map to hypothesis and optimizer lineage.")
 
     if avg_slippage_bps > 8.0:
         items.append("Average slippage is above 8 bps. Enforce tighter impact guardrails and venue routing checks.")

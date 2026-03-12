@@ -9,12 +9,11 @@ description = "Baseline service layout for CryptoSwarms"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "fastapi>=0.115.0",
+  "fastapi>=0.111.1,<0.115.0",
   "pydantic>=2.7.0",
-  "pydantic-settings>=2.4.0",
-  "redis>=5.0.0",
+  "redis>=4.1.4,<5.0.0",
   "asyncpg>=0.29.0",
-  "uvicorn>=0.30.0",
+  "uvicorn>=0.29.0,<0.30.0",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +26,7 @@ backtest = [
 memory = [
   "mem0ai>=0.1.0",
   "graphiti-core>=0.3.0",
+  "pydantic-settings>=2.0.0",
 ]
 
 [project.scripts]

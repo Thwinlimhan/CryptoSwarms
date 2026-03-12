@@ -133,11 +133,14 @@ def main() -> None:
 
     memory = AgentMemoryRecorder("market_scanner")
 
+    dev_mode = "--dev" in os.sys.argv or os.getenv("PHASE1_DEV_MODE", "0") in ("1", "true", "yes")
+    config = ScannerConfig(max_signals_per_cycle=5, min_confidence=0.4 if dev_mode else 0.65)
+
     runner = MarketScannerCycleRunner(
         data_source=StaticMarketDataSource(),
         sink=sink,
         heartbeat_store=heartbeat_store,
-        config=ScannerConfig(max_signals_per_cycle=5, min_confidence=0.65),
+        config=config,
         memory_recorder=memory,
     )
 

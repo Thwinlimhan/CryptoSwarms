@@ -84,8 +84,11 @@ def summarize_paper_window(trades: list[PaperTrade], *, now: datetime | None = N
         now = now.replace(tzinfo=timezone.utc)
 
     strategy_id = trades[0].strategy_id
+    if any(trade.strategy_id != strategy_id for trade in trades):
+        raise ValueError("summarize_paper_window requires trades from a single strategy")
+
     start = now - timedelta(days=lookback_days)
-    window = [t for t in trades if t.time >= start]
+    window = [t for t in trades if t.strategy_id == strategy_id and t.time >= start]
     if not window:
         return None
 
