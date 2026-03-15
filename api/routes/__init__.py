@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from api.routes import (
     health, costs, dashboard, decision, 
     orchestration, tracing, backtest, agents, websocket,
-    failure_ledger, paper, research
+    failure_ledger, paper, research, portfolio
 )
 
 router = APIRouter()
@@ -18,3 +18,4 @@ router.include_router(websocket.router)
 router.include_router(failure_ledger.router)
 router.include_router(paper.router)
 router.include_router(research.router)
+router.include_router(portfolio.router)

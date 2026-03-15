@@ -36,6 +36,25 @@ from cryptoswarms.execution_router import ExecutionRouter, OrderIntent
 from cryptoswarms.position_manager import PositionManager, ExitReason
 from cryptoswarms.kelly_sizer import kelly_size
 
+# Reliability & Risk Components
+from cryptoswarms.adapters.rate_limiter import ExchangeRateLimiter
+from cryptoswarms.adapters.exchange_errors import ExchangeErrorHandler
+from agents.orchestration.signal_deduplicator import SignalDeduplicator
+from agents.execution.execution_coordinator import ExecutionCoordinator
+from agents.execution.order_persistence import OrderPersistence
+from cryptoswarms.resilience.circuit_breaker import CircuitBreakerRegistry, ExchangeCircuitBreaker
+from cryptoswarms.resilience.degradation_manager import DegradationManager
+from cryptoswarms.alerting.alert_manager import AlertManager
+from cryptoswarms.monitoring.agent_metrics import get_agent_metrics
+from cryptoswarms.risk.correlation_manager import CorrelationRiskManager
+from cryptoswarms.risk.sector_limits import SectorRiskManager
+from cryptoswarms.risk.volatility_sizer import VolatilityAdjustedSizer
+from cryptoswarms.signals.conflict_resolver import SignalConflictResolver
+from cryptoswarms.signals.ensemble_weighter import SignalEnsemble
+from cryptoswarms.signals.signal_decay import SignalDecayModel
+from cryptoswarms.tracing.execution_tracer import ExecutionTracer
+from cryptoswarms.tracing.trace_logger import get_trace_logger
+
 logger = logging.getLogger("agent_runner")
 
 
@@ -92,6 +111,35 @@ class AgentRunner:
         # Load strategies
         self.strategy_loader = StrategyLoader()
         self.strategies = self.strategy_loader.load_all()
+
+        # ── Reliability & Risk Orchestration ──────────────
+        self.rate_limiter = ExchangeRateLimiter()
+        self.error_handler = ExchangeErrorHandler()
+        self.deduplicator = SignalDeduplicator()
+        self.coordinator = ExecutionCoordinator()
+        self.persistence = OrderPersistence()
+        self.breakers = CircuitBreakerRegistry()
+        self.degradation = DegradationManager()
+        self.alerts = AlertManager()
+        self.metrics = get_agent_metrics()
+        self.tracer = ExecutionTracer()
+        self.logger = get_trace_logger()
+        
+        # Risk Managers
+        self.correlation_risk = CorrelationRiskManager()
+        self.sector_risk = SectorRiskManager()
+        self.vol_sizer = VolatilityAdjustedSizer()
+        
+        # Signal Refinement
+        self.conflict_resolver = SignalConflictResolver()
+        self.ensemble = SignalEnsemble()
+        self.decay_model = SignalDecayModel()
+
+        # Circuit Breaker for Hyperliquid
+        self.hl_breaker = self.breakers.get_breaker(
+            "hyperliquid",
+            ExchangeCircuitBreaker(name="hyperliquid", failure_threshold=5)
+        )
 
         self._tasks: list[asyncio.Task] = []
         self._running = False

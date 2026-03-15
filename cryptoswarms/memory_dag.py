@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -28,6 +29,7 @@ class MemoryDag:
     def __init__(self) -> None:
         self._nodes: dict[str, MemoryDagNode] = {}
         self._edges: list[MemoryDagEdge] = []
+        self._lock = asyncio.Lock()
 
     def add_node(
         self,
@@ -54,12 +56,36 @@ class MemoryDag:
         self._nodes[node_id] = node
         return node
 
+    async def async_add_node(
+        self,
+        *,
+        node_type: str,
+        topic: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+        created_at: datetime | None = None,
+    ) -> MemoryDagNode:
+        """Thread-safe version of add_node using asyncio.Lock."""
+        async with self._lock:
+            return self.add_node(
+                node_type=node_type,
+                topic=topic,
+                content=content,
+                metadata=metadata,
+                created_at=created_at,
+            )
+
     def add_edge(self, *, from_node_id: str, to_node_id: str) -> None:
         if from_node_id not in self._nodes or to_node_id not in self._nodes:
             raise ValueError("both nodes must exist before linking")
         if self._reachable(start=to_node_id, target=from_node_id):
             raise ValueError("edge would create cycle")
         self._edges.append(MemoryDagEdge(from_node_id=from_node_id, to_node_id=to_node_id))
+
+    async def async_add_edge(self, *, from_node_id: str, to_node_id: str) -> None:
+        """Thread-safe version of add_edge using asyncio.Lock."""
+        async with self._lock:
+            self.add_edge(from_node_id=from_node_id, to_node_id=to_node_id)
 
     def get_node(self, node_id: str) -> MemoryDagNode | None:
         return self._nodes.get(node_id)

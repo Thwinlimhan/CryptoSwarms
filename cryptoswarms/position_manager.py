@@ -5,6 +5,7 @@ Every entry, exit, stop-loss, and take-profit flows through here.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -90,6 +91,7 @@ class PositionManager:
     def __init__(self) -> None:
         self.open_positions: dict[str, Position] = {}
         self.closed_trades: list[ClosedTrade] = []
+        self._positions_lock = asyncio.Lock()
 
     # ── Entry ─────────────────────────────────────────────────────
     def open_position(
@@ -249,6 +251,36 @@ class PositionManager:
                     closed.append(trade)
 
         return closed
+
+    # ── Async Thread-Safe Wrappers ────────────────────────────────
+    async def async_open_position(self, **kwargs) -> Position:
+        """Thread-safe version of open_position."""
+        async with self._positions_lock:
+            return self.open_position(**kwargs)
+
+    async def async_close_position(
+        self,
+        position_id: str,
+        exit_price: float,
+        exit_reason: ExitReason,
+        timestamp: datetime | None = None,
+        slippage_bps: float | None = None,
+    ) -> ClosedTrade | None:
+        """Thread-safe version of close_position."""
+        async with self._positions_lock:
+            return self.close_position(
+                position_id, exit_price, exit_reason,
+                timestamp=timestamp, slippage_bps=slippage_bps,
+            )
+
+    async def async_check_exits(
+        self,
+        current_prices: dict[str, float],
+        timestamp: datetime | None = None,
+    ) -> list[ClosedTrade]:
+        """Thread-safe version of check_exits."""
+        async with self._positions_lock:
+            return self.check_exits(current_prices, timestamp=timestamp)
 
     # ── Portfolio Metrics ─────────────────────────────────────────
     @property
