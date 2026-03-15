@@ -1,0 +1,1285 @@
+# EV + Crypto Trading App — Complete Prompt Engineering Master Document
+
+> **Scope:** 16 structured, production-grade prompts combining the full EV/probability decision framework with a complete crypto-specific trading layer. Each prompt is self-contained and ready to paste into a new Claude conversation.
+
+-----
+
+## Table of Contents
+
+**Part I — EV & Probability Framework (Prompts 01–08)**
+
+- [01 · Core EV Calculator](#01--core-ev-calculator)
+- [02 · Kelly Criterion Position Sizer](#02--kelly-criterion-position-sizer)
+- [03 · Bayesian Belief Updater](#03--bayesian-belief-updater)
+- [04 · Decision Framework Dashboard](#04--decision-framework-dashboard)
+- [05 · Variance & Sample Size Analyzer](#05--variance--sample-size-analyzer)
+- [06 · Prediction Market Mispricing Scanner](#06--prediction-market-mispricing-scanner)
+- [07 · Power Law Portfolio Simulator](#07--power-law-portfolio-simulator)
+- [08 · Decision History & EV Calibration Tracker](#08--decision-history--ev-calibration-tracker)
+
+**Part II — Crypto Trading Layer (Prompts C1–C8)**
+
+- [C1 · Asymmetric Trade Setup Calculator](#c1--asymmetric-trade-setup-calculator)
+- [C2 · Funding Rate EV Analyzer](#c2--funding-rate-ev-analyzer)
+- [C3 · Liquidation Map & Cascade Probability](#c3--liquidation-map--cascade-probability)
+- [C4 · On-Chain Signal Aggregator](#c4--on-chain-signal-aggregator)
+- [C5 · Market Regime Detector](#c5--market-regime-detector)
+- [C6 · Live Trade EV Dashboard](#c6--live-trade-ev-dashboard)
+- [C7 · Strategy Backtest EV Validator](#c7--strategy-backtest-ev-validator)
+- [C8 · Crypto Probability Master Dashboard](#c8--crypto-probability-master-dashboard)
+
+-----
+
+## Architecture Overview
+
+```
+PART I — DECISION SCIENCE LAYER
+┌─────────────┐   ┌──────────────┐   ┌──────────────────┐
+│  EV Calc    │ → │ Kelly Sizer  │ → │ Bayesian Updater │
+└─────────────┘   └──────────────┘   └──────────────────┘
+       ↓                  ↓                   ↓
+┌─────────────────────────────────────────────────────────┐
+│           Decision Framework Dashboard (04)             │
+└─────────────────────────────────────────────────────────┘
+       ↓                  ↓                   ↓
+┌─────────────┐   ┌──────────────┐   ┌──────────────────┐
+│  Variance   │   │  Mispricing  │   │   Power Law      │
+│  Analyzer   │   │  Scanner     │   │   Simulator      │
+└─────────────┘   └──────────────┘   └──────────────────┘
+                         ↓
+                ┌──────────────────┐
+                │  Decision Hist.  │
+                │  EV Calibration  │
+                └──────────────────┘
+
+PART II — CRYPTO TRADING LAYER (feeds into Part I)
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│ On-Chain │  │  Regime  │  │ Funding  │  │  Liq Map │
+│ Signals  │  │ Detector │  │ Analyzer │  │ (C3)     │
+│  (C4)    │  │  (C5)    │  │  (C2)    │  │          │
+└────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
+     └──────────────┴──────────────┴─────────────┘
+                         ↓
+               ┌──────────────────────┐
+               │  Trade Setup (C1)    │
+               │  EV + R:R Calculator │
+               └──────────┬───────────┘
+                          ↓
+               ┌──────────────────────┐
+               │  Live Trade Mgmt     │
+               │  Dashboard (C6)      │
+               └──────────┬───────────┘
+                          ↓
+          ┌───────────────┴───────────────┐
+          ↓                               ↓
+┌─────────────────┐             ┌─────────────────────┐
+│  Backtest EV    │             │  Master Dashboard   │
+│  Validator (C7) │             │  (C8) — GO/NO GO    │
+└─────────────────┘             └─────────────────────┘
+```
+
+-----
+
+## Build Order
+
+|Order|Prompt                |Why First                                       |
+|-----|----------------------|------------------------------------------------|
+|1    |01 EV Calculator      |Foundation formula every other module depends on|
+|2    |02 Kelly Sizer        |Sizing needed before any real decisions         |
+|3    |C1 Trade Setup        |Combines EV + Kelly for crypto entries          |
+|4    |C5 Regime Detector    |Context for all signals                         |
+|5    |C4 On-Chain Signals   |Directional probability input                   |
+|6    |C2 Funding Analyzer   |Hidden cost layer                               |
+|7    |C3 Liquidation Map    |Structural price level awareness                |
+|8    |C8 Master Dashboard   |Unifies all inputs into GO/NO GO                |
+|9    |03 Bayesian Updater   |Update beliefs as signals arrive                |
+|10   |04 Decision Dashboard |Full workflow orchestration                     |
+|11   |C6 Live Trade         |In-trade management                             |
+|12   |C7 Backtest Validator |Strategy validation                             |
+|13   |05 Variance Analyzer  |Statistical quality control                     |
+|14   |06 Mispricing Scanner |Edge finding                                    |
+|15   |07 Power Law Simulator|Portfolio construction                          |
+|16   |08 Calibration Tracker|Long-term learning loop                         |
+
+-----
+
+# Part I — EV & Probability Framework
+
+-----
+
+## 01 · Core EV Calculator
+
+**Tag:** `FOUNDATION`  
+**Depends on:** Nothing — this is the root module  
+**Used by:** All other modules
+
+### Prompt
+
+```
+Build a production-grade Expected Value Calculator module for a probabilistic decision-making app.
+
+CONTEXT:
+The user inputs multiple outcome scenarios. The app calculates whether a decision
+has positive or negative expected value.
+
+FORMULA:
+EV = Σ (probability_i × outcome_i)
+Where outcomes are signed: positive for gains, negative for losses.
+
+REQUIREMENTS:
+1. Dynamic scenario builder — user can add/remove outcome rows (min 2, no max)
+2. Each row has: label (text), probability (%), outcome ($)
+3. Live validation: probabilities must sum to 100% (show running total with color feedback)
+4. Real-time EV calculation updating as user types
+5. Decision output: large bold "TAKE IT" (green) or "SKIP IT" (red) based on EV sign
+6. Breakdown table showing each scenario's weighted contribution
+7. Summary stats: total upside, total downside, risk/reward ratio
+
+UI BEHAVIOR:
+- Probabilities auto-normalize on blur (optional toggle)
+- Outcome field accepts negative numbers for loss scenarios
+- EV displayed prominently with +/- sign and color coding
+- Export result as shareable JSON blob
+
+EDGE CASES:
+- Handle 100% probability (deterministic, no uncertainty)
+- Warn if single scenario has >90% probability
+- Prevent submission if probabilities don't sum to ~100% (±0.5% tolerance)
+
+TECH: React with useState/useReducer, Tailwind for layout, recharts for outcome
+distribution bar chart.
+```
+
+-----
+
+## 02 · Kelly Criterion Position Sizer
+
+**Tag:** `RISK SIZING`  
+**Depends on:** Module 01 (EV must be positive before sizing)  
+**Used by:** C1 Trade Setup, C8 Master Dashboard
+
+### Prompt
+
+```
+Build a Kelly Criterion Position Sizing tool for a trading/betting probability app.
+
+CONTEXT:
+User has a +EV opportunity. They need to know HOW MUCH of their bankroll to risk.
+
+FORMULA:
+f* = (b × p - q) / b
+Where:
+  b = net odds (payout per $1 risked)
+  p = probability of winning
+  q = 1 - p
+
+KELLY VARIANTS to implement:
+  Full Kelly  → f*
+  Half Kelly  → f* / 2  (recommended for most)
+  Quarter Kelly → f* / 4 (conservative, used by pros)
+
+INPUTS:
+1. Win probability (slider 0–100%)
+2. Net odds b (e.g. 3 means you win $3 for every $1 risked)
+3. Total bankroll ($)
+4. Kelly multiplier selector: Full / Half / Quarter (radio or segmented control)
+
+OUTPUTS:
+1. f* percentage — fraction of bankroll to bet
+2. Dollar amount to bet
+3. Remaining bankroll after bet
+4. Probability of ruin estimate: P(ruin) ≈ ((1-p)/p)^(bankroll/bet)
+5. Warning banner if Full Kelly f* > 25% (psychologically brutal zone)
+
+VISUALIZATION:
+- Animated bankroll meter showing bet slice vs. reserve
+- Comparison table: Full vs Half vs Quarter Kelly side-by-side
+- Growth trajectory chart: simulated 50-bet compounding curve for each
+  Kelly variant using recharts LineChart
+
+EDGE CASES:
+- If EV is negative (b×p < q), show "DO NOT BET — Negative EV" and disable output
+- If f* > 1 (overbetting signal), cap at 100% and flag as extreme
+- Handle b = 0 (graceful error)
+
+TECH: React, Tailwind, recharts for simulated growth chart.
+```
+
+-----
+
+## 03 · Bayesian Belief Updater
+
+**Tag:** `INFERENCE`  
+**Depends on:** Nothing (standalone)  
+**Used by:** C4 On-Chain Signals, C5 Regime Detector, C8 Master Dashboard
+
+### Prompt
+
+```
+Build a Bayesian Belief Updater module for a probabilistic reasoning app.
+
+CONTEXT:
+The user starts with a prior belief about something being true. They receive new
+evidence. The app updates their belief using Bayes' Theorem.
+
+FORMULA:
+P(A|B) = P(B|A) × P(A) / P(B)
+Where:
+  P(A)    = prior probability (initial belief)
+  P(B|A)  = likelihood (how likely is the evidence if A is true)
+  P(B)    = marginal probability of the evidence
+  P(A|B)  = posterior (updated belief)
+
+MULTI-STEP UPDATING:
+After each evidence update, the posterior becomes the new prior.
+Support a chain of up to 10 evidence updates.
+
+INPUTS per evidence step:
+1. Evidence label (text, e.g. "Candidate crushed technical interview")
+2. Likelihood P(B|A): probability of seeing this evidence IF hypothesis is true (slider)
+3. Base rate P(B): how common is this evidence overall (slider)
+
+GLOBAL INPUT:
+- Prior belief P(A): starting probability (slider 0–100%)
+- Hypothesis label (text, e.g. "This trade setup has real edge")
+
+OUTPUTS:
+1. Updated posterior after each evidence step
+2. Evidence log: table showing each step → prior → evidence → posterior
+3. Net belief swing: delta from original prior to current posterior
+4. Confidence level label: Weak (<40%) / Moderate (40–65%) / Strong (65–85%) / Very Strong (>85%)
+
+VISUALIZATION:
+- Animated probability gauge that smoothly transitions on each update
+- Timeline chart (recharts) showing belief evolution across all evidence steps
+- Color-coded evidence list: green if evidence increased belief, red if it decreased
+
+PRESETS (quick-start examples):
+- Trade signal validation
+- Market regime assessment
+- Investment thesis update
+- Counterparty risk evaluation
+
+TECH: React, recharts AreaChart for belief timeline, Tailwind.
+```
+
+-----
+
+## 04 · Decision Framework Dashboard
+
+**Tag:** `WORKFLOW`  
+**Depends on:** Modules 01, 02, 03  
+**Used by:** Top-level workflow orchestration
+
+### Prompt
+
+```
+Build a Decision Framework Dashboard implementing the full professional
+probabilistic decision loop.
+
+CONTEXT:
+This is the master workflow view. It guides users through every step of making
+a high-quality probabilistic decision from start to finish.
+
+THE 7-STEP LOOP (implement as a stepper/wizard):
+
+STEP 1 — FRAME THE DECISION
+  Input: Decision name, context description, deadline
+  Output: Structured decision card
+
+STEP 2 — ESTIMATE PROBABILITIES
+  Input: List of outcomes with base-rate probability estimates
+  Validation: Must sum to 100%
+  Tool: Integrate the EV Calculator module (Module 01) inline
+
+STEP 3 — CALCULATE EXPECTED VALUE
+  Auto-calculated from Step 2
+  Show: EV, risk/reward ratio, best/worst case
+
+STEP 4 — SIZE THE POSITION
+  Input: Bankroll, Kelly multiplier preference
+  Integrate Kelly Criterion module (Module 02) inline
+  Output: Recommended position size in $ and %
+
+STEP 5 — CHECK HIDDEN RISKS
+  Checklist of common cognitive biases:
+  ☐ Overconfidence bias checked
+  ☐ Narrative fallacy avoided
+  ☐ Sample size sufficient
+  ☐ Correlation/confounders considered
+  ☐ Tail risk scenario modeled
+  Required: All 5 checked before proceeding
+
+STEP 6 — EXECUTE & RECORD
+  Lock in: actual amount bet, date, decision rationale (text)
+  Status: Pending outcome
+
+STEP 7 — TRACK OUTCOME & UPDATE MODEL
+  Input: Actual outcome (win/loss + amount)
+  Auto-calculates: Running EV accuracy, calibration score
+  Triggers: Bayesian update suggestion if outcome was surprising
+
+GLOBAL STATS BAR (persistent header):
+  Total decisions logged | Correct process % | Actual P&L | EV accuracy score
+
+STORAGE: Use localStorage to persist decision history across sessions.
+
+TECH: React multi-step form, progress stepper, Tailwind, recharts for stats.
+```
+
+-----
+
+## 05 · Variance & Sample Size Analyzer
+
+**Tag:** `STATISTICS`  
+**Depends on:** Module 01 (trade return data)  
+**Used by:** C7 Backtest Validator, Module 08 Calibration Tracker
+
+### Prompt
+
+```
+Build a Variance & Sample Size Analysis module for a probabilistic decision app.
+
+CONTEXT:
+Users often misjudge their skill because they draw conclusions from tiny samples.
+This module quantifies uncertainty and shows when results become statistically meaningful.
+
+COMPONENT 1 — CONFIDENCE INTERVAL CALCULATOR
+  Inputs:
+    - Observed win rate (%)
+    - Sample size (n)
+    - Confidence level (90% / 95% / 99%)
+  Outputs:
+    - CI: [lower bound, upper bound]
+    - Width of interval
+    - Interpretation: "You know almost nothing" / "Early signal" / "Solid evidence" / "High confidence"
+  Formula: CI = p ± z × √(p(1-p)/n)
+
+COMPONENT 2 — SAMPLE SIZE REQUIREMENT CALCULATOR
+  Inputs:
+    - Desired margin of error (e.g. ±3%)
+    - Estimated true rate (%)
+    - Confidence level
+  Output:
+    - Required sample size n
+    - "You need X more observations"
+
+COMPONENT 3 — SKILL VS LUCK DECOMPOSITION
+  Inputs:
+    - Win rate (%)
+    - Number of trials completed
+    - True edge estimate (%)
+  Simulation:
+    - Run 1000 Monte Carlo trials at the given edge
+    - Show distribution of outcomes at n=50, n=500, n=5000
+    - Highlight where the user's actual result falls
+  Key insight callout: "At your current sample size, variance explains X% of your result"
+
+COMPONENT 4 — HOW MANY TRIALS UNTIL SKILL DOMINATES?
+  Input: Win rate + estimated true edge
+  Output: n required for 95% confidence that performance is skill-driven
+  Visual: Progress bar "You are X% of the way to statistical significance"
+
+VISUALIZATION:
+  - recharts BarChart for CI range visualization
+  - recharts ScatterPlot for Monte Carlo distribution
+  - Animated counter for sample size requirement
+
+TECH: React, recharts, simple Monte Carlo in JS (no external libs needed).
+```
+
+-----
+
+## 06 · Prediction Market Mispricing Scanner
+
+**Tag:** `EDGE FINDING`  
+**Depends on:** Module 01 (EV formula)  
+**Used by:** Standalone edge identification
+
+### Prompt
+
+```
+Build a Prediction Market Mispricing Scanner for a probabilistic trading app.
+
+CONTEXT:
+A market prices an event at X%. The user's analysis suggests Y%. If the gap is
+large enough, there's a +EV trade. This module quantifies that edge.
+
+CORE FORMULA:
+EV ratio = True probability / Market probability - 1
+e.g. 0.28 / 0.12 - 1 = +133% edge
+
+INPUTS:
+1. Event description (text)
+2. Market price/probability (% or decimal odds)
+3. Your estimated true probability (%)
+4. Reasoning log (text area — why do you think the market is wrong?)
+5. Bias type selector (what's causing the mispricing?):
+   - Recency bias
+   - Narrative fallacy
+   - Low-probability neglect
+   - Overconfidence in consensus
+   - Information asymmetry
+   - Other (custom text)
+
+OUTPUTS:
+1. Edge % = (your_prob / market_prob - 1) × 100
+2. EV per $100 bet
+3. Kelly-recommended position size (auto-calculates if bankroll entered)
+4. Confidence tier:
+   - Edge < 10%: "Marginal — proceed with caution"
+   - Edge 10–30%: "Solid edge — worth taking"
+   - Edge 30–75%: "Strong edge — size up"
+   - Edge > 75%: "Massive edge — double-check your math"
+5. Contrarian score: how far from consensus (visual dial)
+
+OPPORTUNITY LOG:
+  - Save multiple opportunities in a list
+  - Show: event | market % | your % | edge % | status (open/resolved)
+  - After resolution: actual outcome, P&L, whether your estimate was calibrated
+
+CALIBRATION TRACKER:
+  After resolving 10+ predictions:
+  - Plot your predicted probabilities vs actual outcomes (calibration chart)
+  - Perfect calibration = diagonal line
+  - Show where you're overconfident or underconfident
+
+TECH: React, recharts ScatterChart for calibration, localStorage for opportunity log.
+```
+
+-----
+
+## 07 · Power Law Portfolio Simulator
+
+**Tag:** `STRATEGY`  
+**Depends on:** Module 02 (Kelly sizing)  
+**Used by:** Portfolio construction decisions
+
+### Prompt
+
+```
+Build a Power Law Portfolio Simulator for a probabilistic investing/betting app.
+
+CONTEXT:
+In environments with power law distributions (startups, crypto, options), a small
+number of extreme winners dominate total returns. This module simulates that dynamic
+and shows optimal portfolio construction.
+
+POWER LAW MODEL:
+P(x) = C × x^(-α)
+Startup outcomes: α ≈ 1.2
+Typical distribution: many small losses, rare massive winners
+
+SIMULATOR INPUTS:
+1. Number of bets/investments (1–1000, slider)
+2. Cost per bet ($)
+3. Win probability (%) — chance of a meaningful return
+4. Payoff distribution type:
+   - Fixed multiple (e.g. always 10x on wins)
+   - Power law (α parameter, generates random multiples)
+   - Custom: user defines probability tiers (1x, 5x, 10x, 100x with probabilities)
+5. Number of simulations (100–10,000)
+
+OUTPUTS:
+1. Median portfolio outcome
+2. Mean portfolio outcome (will be higher due to power law skew)
+3. Probability of total loss (all bets lose)
+4. Probability of 2x, 5x, 10x, 100x portfolio return
+5. Expected biggest winner size
+6. Optimal number of bets for maximum expected return
+
+MONTE CARLO VISUALIZATION:
+  - Run N simulations, show distribution of final portfolio values
+  - recharts AreaChart: outcome distribution with percentile bands
+  - Highlight: median (most likely), mean (EV), 90th percentile (lucky scenario)
+
+DIVERSIFICATION OPTIMIZER:
+  Show how returns scale with number of bets:
+  - Too few: high variance, ruin risk
+  - Too many: dilution
+  - Optimal: the "sweet spot" highlighted on chart
+
+PRESETS:
+  - Startup angel investing
+  - Crypto small caps
+  - Out-of-the-money options
+  - Polymarket prediction trading
+
+TECH: React, recharts AreaChart + BarChart, Monte Carlo in vanilla JS.
+```
+
+-----
+
+## 08 · Decision History & EV Calibration Tracker
+
+**Tag:** `TRACKING`  
+**Depends on:** Modules 01–07 (feeds from all)  
+**Used by:** Long-run learning and improvement loop
+
+### Prompt
+
+```
+Build a Decision History & EV Calibration Tracker as the analytics backbone
+of a probabilistic decision app.
+
+CONTEXT:
+The professional loop isn't complete without tracking. This module logs every
+decision, records outcomes, and tells the user whether they're actually a good
+probabilistic thinker or just lucky.
+
+DATA MODEL per decision entry:
+{
+  id, date, label, context,
+  ev_estimate, position_size, win_probability,
+  kelly_fraction, bias_flags[],
+  outcome: { date, result, pnl, notes },
+  status: "pending" | "won" | "lost"
+}
+
+VIEWS:
+
+VIEW 1 — DECISION LOG TABLE
+  Columns: Date | Decision | EV Est. | Size | Probability | Status | P&L
+  Filters: Date range, Status, EV range
+  Sort: Any column
+  Actions: Edit outcome, Mark resolved, Delete
+
+VIEW 2 — PERFORMANCE DASHBOARD
+  Stats cards:
+    - Total decisions logged
+    - Win rate (outcomes resolved)
+    - Expected wins (based on stated probabilities)
+    - Actual wins
+    - Calibration delta: actual wins - expected wins
+    - Total P&L vs. Total Expected P&L
+    - Average EV per decision
+  
+  Calibration Chart (recharts ScatterChart):
+    X axis: stated probability (0–100%)
+    Y axis: actual win rate in that probability bucket
+    Perfect calibration = diagonal line y=x
+    Color bands: overconfident zone (red), well-calibrated (green), underconfident (blue)
+
+VIEW 3 — P&L OVER TIME
+  recharts LineChart:
+    - Actual cumulative P&L (blue line)
+    - Expected cumulative P&L based on EV estimates (dashed line)
+    - The gap between them = net luck component
+  
+  Insight callout: "You've been X% luckier/unluckier than expected."
+
+VIEW 4 — BIAS AUDIT
+  Bar chart of most common bias flags checked across decisions
+  Insight: "You flag overconfidence 73% of the time"
+
+EXPORT:
+  - Export full history as CSV
+  - Export calibration report as PDF summary
+
+STORAGE: localStorage for persistence. Import/export JSON for backup.
+
+TECH: React, recharts, Tailwind, localStorage.
+```
+
+-----
+
+# Part II — Crypto Trading Layer
+
+> These 8 modules extend the EV framework with crypto-specific signal generation,
+> market structure analysis, and trade lifecycle management.
+
+-----
+
+## C1 · Asymmetric Trade Setup Calculator
+
+**Tag:** `ENTRIES / EXITS`  
+**Depends on:** Module 01 (EV), Module 02 (Kelly)  
+**Used by:** C6 Live Trade Dashboard, C8 Master Dashboard
+
+### Prompt
+
+```
+Build a professional Asymmetric Trade Setup Calculator for a crypto trading app.
+
+CONTEXT:
+Before entering, answer: Is this trade +EV after fees? How much to risk? Where
+are my targets? This module answers all three.
+
+CORE FORMULA:
+EV = (win_prob × reward) - (loss_prob × risk)
+Net EV = EV - (position_size × fee_rate × 2)  ← entry + exit fees
+
+INPUTS — TRADE PARAMETERS:
+1. Asset (text, e.g. BTC/USDT)
+2. Direction: LONG / SHORT (toggle)
+3. Entry price ($)
+4. Stop Loss price ($)
+5. Take Profit tiers:
+   - TP1 price + % of position to close (e.g. 50%)
+   - TP2 price + % of position to close (e.g. 30%)
+   - TP3 price + % remaining (auto-fills to 100%)
+6. Win probability estimate (%) — user's conviction
+7. Portfolio size ($)
+8. Risk % per trade (slider, 0.5%–5%)
+9. Exchange fee (maker/taker, default 0.04%/0.06%)
+
+CALCULATED OUTPUTS:
+1. Risk in $ = |entry - stop| / entry × position_size
+2. Reward per TP tier in $
+3. Weighted average R:R
+4. EV per trade ($) — fee adjusted
+5. Position size in contracts/units
+6. Liquidation price (for leveraged trades)
+7. BE% — how far price moves before stop hit
+
+TRADE QUALITY SCORE (composite):
+  - R:R ≥ 2: +1 point
+  - R:R ≥ 3: +1 point
+  - EV > 0 after fees: +1 point
+  - Win prob > 45%: +1 point
+  - Multiple TP tiers: +1 point
+  Score 0–5 → F / D / C / B / A / A+
+
+VISUALIZATION:
+  - Price ladder: vertical chart with entry, SL, TP1/2/3 as reference lines
+  - Payoff diagram: bar chart showing $ outcome at each scenario
+  - Risk/Reward dial: animated arc gauge
+
+MULTI-SCENARIO COMPARISON:
+  Build 2–3 setups side by side
+  Table: EV | R:R | Quality Score | Position Size
+
+TECH: React, recharts ComposedChart + BarChart, Tailwind, localStorage for trade log.
+```
+
+-----
+
+## C2 · Funding Rate EV Analyzer
+
+**Tag:** `FUNDING RATES`  
+**Depends on:** Module 01 (EV), C1 (trade parameters)  
+**Used by:** C8 Master Dashboard, C6 Live Trade Dashboard
+
+### Prompt
+
+```
+Build a Funding Rate EV Analyzer for a crypto perpetual futures trading app.
+
+CONTEXT:
+Funding rates create hidden costs/income that affect trade EV. Positive funding =
+longs pay shorts every 8 hours. This module makes that math explicit.
+
+MODULE 1 — FUNDING COST CALCULATOR
+  Inputs:
+    - Position size ($)
+    - Direction: LONG / SHORT
+    - Current funding rate (%) per 8h interval
+    - Expected hold duration (hours or days)
+    - Funding rate trend: Stable / Rising / Falling
+  
+  Outputs:
+    - Total funding paid/received ($)
+    - Annualized funding rate (%)
+    - Funding as % of potential profit (the "invisible fee")
+    - Break-even price movement needed to offset funding cost
+    - Funding-adjusted EV
+
+MODULE 2 — FUNDING REGIME CLASSIFIER
+  Inputs: Last 10 funding rate readings (paste or manual entry)
+  Classify:
+    - NEUTRAL: -0.01% to +0.01% → "Fair market"
+    - BULLISH EXCESS: > +0.05% → "Longs overextended, mean reversion risk"
+    - BEARISH EXCESS: < -0.05% → "Shorts overextended, squeeze risk"
+    - EXTREME GREED: > +0.1% → "Long liquidation cascade probability high"
+    - EXTREME FEAR: < -0.1% → "Short squeeze probability high"
+
+MODULE 3 — FUNDING ARBITRAGE SCANNER
+  Concept: delta-neutral — long spot + short perp
+  Inputs: spot price, perp price, funding rate, capital, fees, hold duration
+  Outputs:
+    - Net yield annualized (%)
+    - Daily income ($)
+    - Break-even hold time (days)
+    - Risk checklist: basis risk, liquidation risk, exchange risk
+
+MODULE 4 — VISUALIZATION
+  recharts LineChart: funding history with regime color bands
+  recharts AreaChart: cumulative funding cost over hold duration
+
+INTEGRATION:
+  Every setup from C1 should auto-import here
+  Show: "Your trade has X days expected hold. At current funding,
+         carry cost = $Y, reducing EV from $Z to $W"
+
+TECH: React, recharts, Tailwind, manual data entry.
+```
+
+-----
+
+## C3 · Liquidation Map & Cascade Probability
+
+**Tag:** `LIQUIDATION MAPS`  
+**Depends on:** C1 (price levels), C5 (regime context)  
+**Used by:** C8 Master Dashboard
+
+### Prompt
+
+```
+Build a Liquidation Map & Cascade Probability module for a crypto trading app.
+
+CONTEXT:
+Liquidation clusters act as price magnets. Understanding them is a core structural edge.
+
+MODULE 1 — LIQUIDATION ZONE BUILDER
+  Inputs per zone (from Coinglass data, pasted manually):
+    - Price level ($)
+    - Estimated liquidation volume ($M)
+    - Direction: LONG liquidations / SHORT liquidations
+  
+  Outputs:
+    - Liquidation density map: bar chart by size and direction
+    - Total long liquidations above/below current price
+    - Long/Short liquidation ratio (imbalance signal)
+    - Nearest major cluster: distance in % and $
+
+MODULE 2 — CASCADE PROBABILITY CALCULATOR
+  Inputs: starting price, target zone, zone volume, avg daily volume, impact coefficient
+  
+  Formula:
+    price_impact = (liq_volume × impact_coeff) / avg_daily_volume × 100
+    cascade_probability = min(price_impact / distance_to_next_zone × 100, 95%)
+  
+  Outputs:
+    - Probability that hitting Zone A cascades to Zone B (%)
+    - Expected price movement from cascade
+    - Cascade chain: Zone A → Zone B → Zone C with probability decay
+    - Liquidity vacuum identifier (gaps between zones)
+
+MODULE 3 — SWEEP TARGET PROBABILITY RANKER
+  Score per zone = (volume × 0.4) + (proximity_score × 0.35) + (imbalance_factor × 0.25)
+  
+  Output: Top 5 sweep targets ranked by probability
+  If sweep probability > 60%: suggest fade setup (enter after sweep completes)
+
+MODULE 4 — EV OF SWEEP TRADE
+  Auto-generates trade params for a liquidity sweep play:
+    - Entry: just beyond the liquidation zone
+    - SL: beyond next cluster
+    - TP: 50% retrace of sweep move (mean reversion target)
+    - Win probability: derived from cascade probability score
+  One-click export to C1 Trade Setup Calculator
+
+VISUALIZATION:
+  recharts ComposedChart: price X-axis, liquidation volume as bars
+  Red bars = long liquidations, green bars = short liquidations
+  Current price as vertical reference line
+
+TECH: React, recharts, Tailwind. Manual data input from Coinglass.
+```
+
+-----
+
+## C4 · On-Chain Signal Aggregator
+
+**Tag:** `ON-CHAIN METRICS`  
+**Depends on:** Module 03 (Bayesian updating)  
+**Used by:** C8 Master Dashboard, C1 Trade Setup (win probability input)
+
+### Prompt
+
+```
+Build an On-Chain Signal Aggregator module for a crypto probabilistic trading app.
+
+CONTEXT:
+CVD, OI, and whale flows are the smart money footprint. Each metric alone is noisy.
+Combined into a probability framework, they generate high-conviction signals.
+
+MODULE 1 — CVD ANALYZER
+  User inputs observed CVD behavior:
+    - CVD vs Price relationship:
+      ☐ Price up + CVD up → confirmed buying (bullish)
+      ☐ Price up + CVD down → bearish divergence
+      ☐ Price down + CVD up → bullish divergence
+      ☐ Price down + CVD down → confirmed selling (bearish)
+    - CVD slope: Accelerating / Steady / Decelerating
+  Output: CVD signal + strength score (1–5)
+
+MODULE 2 — OPEN INTEREST ANALYZER
+  Interpretation matrix (auto-classify from inputs):
+    OI↑ + Price↑ = New longs, trend continuation → BULLISH
+    OI↑ + Price↓ = New shorts, continuation → BEARISH
+    OI↓ + Price↑ = Short covering, less conviction → WEAKLY BULLISH
+    OI↓ + Price↓ = Long liquidation, capitulation → WEAKLY BEARISH
+    OI↑ + Funding extreme = Leverage overextension → REVERSAL RISK
+  
+  Overextension warning if OI > 30-day average by > 40%
+  Output: OI signal classification + strength (1–5)
+
+MODULE 3 — WHALE FLOW TRACKER
+  Input: Transactions from Whale Alert or Nansen (manual)
+  Interpretation:
+    Large inflow to exchange = sell intent → BEARISH
+    Large outflow from exchange = accumulation → BULLISH
+    Miner outflow to exchange = sell pressure → BEARISH
+  
+  Decay factor:
+    0–4h: 100% signal weight
+    4–12h: 70%
+    12–24h: 40%
+    > 24h: 20%
+
+MODULE 4 — COMBINED CONVICTION SCORE
+  Weights: CVD 35%, OI 35%, Whale Flow 30%
+  
+  Net conviction = Bull_score - Bear_score  (range -5 to +5)
+  Directional probability = 50% + (net_conviction × 8%)  [capped 15–85%]
+  
+  Conviction tiers:
+    < 55%: LOW — no edge
+    55–65%: MEDIUM
+    65–75%: HIGH
+    > 75%: VERY HIGH
+  
+  One-click: export probability to C1 as win_probability input
+
+VISUALIZATION:
+  Radar chart: 3 axes (CVD, OI, Whale Flow)
+  Conviction gauge: arc dial showing directional probability
+  Signal log: last 10 assessments with calibration tracking
+
+TECH: React, recharts RadarChart, Tailwind, localStorage.
+```
+
+-----
+
+## C5 · Market Regime Detector
+
+**Tag:** `REGIME DETECTION`  
+**Depends on:** Nothing (standalone input layer)  
+**Used by:** C8 Master Dashboard, C1 Trade Setup, C4 Signal weighting
+
+### Prompt
+
+```
+Build a Market Regime Detector module for a crypto probabilistic trading app.
+
+CONTEXT:
+Using a trending strategy in a choppy market — or a range strategy in a trending
+market — is the single most costly mistake in trading. This module classifies the
+current regime and tells you which playbook to run.
+
+THE 4 REGIMES:
+  1. TRENDING BULL — Higher highs, higher lows. Momentum strategies dominate.
+  2. TRENDING BEAR — Lower highs, lower lows. Short momentum / put protection.
+  3. CHOPPY RANGE — Mean reversion. Buy support, sell resistance.
+  4. VOLATILE EXPANSION — Directionless, expanding ranges. Reduce size or stay flat.
+
+MODULE 1 — REGIME INPUT PANEL
+  User provides current observations (no API required, manual inputs):
+  
+  Price structure:
+    - Recent HH/HL pattern? (Yes/No)
+    - Recent LH/LL pattern? (Yes/No)
+    - Price relative to 20MA: Above / Below / Chopping through
+    - Price relative to 200MA: Above / Below
+  
+  Volatility:
+    - ATR trend: Expanding / Contracting / Stable
+    - BBands: Upper / Middle / Lower / Squeezing / Expanding
+  
+  Volume profile:
+    - Volume on up moves vs down moves: Higher on ups / Higher on downs / Equal
+  
+  Momentum:
+    - RSI location: Overbought (>70) / Neutral (30–70) / Oversold (<30)
+    - MACD: Bullish cross / Bearish cross / Above zero / Below zero
+
+MODULE 2 — REGIME SCORING ENGINE
+  Each input maps to a score for one of the 4 regimes.
+  Primary regime = highest score.
+  Confidence = primary score / second-highest ratio.
+
+MODULE 3 — STRATEGY PLAYBOOK OUTPUT
+  Per regime, outputs exact rules:
+  
+  TRENDING BULL:
+    ✓ Buy pullbacks to 20 EMA
+    ✓ Trail stops, let winners run
+    ✓ Avoid shorts
+    Recommended R:R minimum: 1.5:1
+  
+  CHOPPY RANGE:
+    ✓ Buy support, sell resistance
+    ✓ Take profits quickly
+    ✓ Avoid breakout trades (high fakeout probability)
+    Recommended R:R minimum: 2:1
+  
+  VOLATILE EXPANSION:
+    ✓ Reduce exposure to 25%
+    ✓ Widen stops or stay flat
+    Recommended R:R minimum: 3:1
+
+MODULE 4 — STRATEGY COMPATIBILITY MATRIX
+  Interactive grid:
+    Rows: 4 regimes
+    Columns: Momentum Long | Momentum Short | Mean Reversion | Breakout | Funding Arb
+    Cells: ✓ High edge / ~ Marginal / ✗ Avoid
+  Current regime row highlighted.
+
+MODULE 5 — REGIME TRANSITION DETECTOR
+  Warning flags (user checks):
+    - Volume drying up in trend direction
+    - ATR sudden spike > 2x 20-period average
+    - MA slope flattening
+  Output: "REGIME IN TRANSITION — reduce sizing until confirmed"
+
+TECH: React, recharts RadarChart for regime probabilities, Tailwind, localStorage.
+```
+
+-----
+
+## C6 · Live Trade EV Dashboard
+
+**Tag:** `LIVE DECISIONS`  
+**Depends on:** C1 (trade setup), C2 (funding), C4 (on-chain signals), C5 (regime)  
+**Used by:** Active trade management
+
+### Prompt
+
+```
+Build a Live Trade EV Dashboard for a crypto trading app — the active trade
+management hub.
+
+CONTEXT:
+Opening a trade is only half the decision. Managing it correctly as price moves,
+funding accumulates, and signals change is where most traders lose captured edge.
+
+MODULE 1 — OPEN POSITION TRACKER
+  Per open trade:
+    - Asset, direction, entry price, entry time
+    - Current price (manual update), stop loss, TP levels
+    - Position size ($), leverage (optional)
+    - Unrealized P&L ($)
+    - Current R: (current_price - entry) / (entry - stop)
+    - Elapsed time in trade (hours)
+    - Accumulated funding cost (from C2)
+
+MODULE 2 — DYNAMIC EV RECALCULATOR
+  From current price (not entry), recalculate:
+    - Distance to SL (remaining risk)
+    - Distance to TP1/2/3 (remaining reward)
+    - Updated R:R from current price
+    - Updated EV, funding-adjusted
+  
+  Auto-flags:
+    IF current_RR < 1.0: "CONSIDER CUTTING — R:R no longer favorable"
+    IF funding > 30% of remaining reward: "FUNDING ERODING EDGE"
+    IF price within 5% of SL: "PROXIMITY ALERT"
+    IF price hit TP1: "TP1 REACHED — execute partial close?"
+
+MODULE 3 — SIGNAL CHANGE ALERT SYSTEM
+  Re-input current signals while in trade. Compare to entry signals:
+    - CVD: Same / Reversed / Weakened?
+    - OI: Expanding / Contracting in trade direction?
+    - Regime: Still same as entry?
+    - Funding: Still acceptable?
+  
+  Signal delta score:
+    All maintained → "HOLD — thesis intact"
+    1 reversed → "CAUTION — partial reduce recommended"
+    2 reversed → "HIGH ALERT — consider full close"
+    Regime changed → "EXIT SIGNAL — regime mismatch"
+
+MODULE 4 — SCALE-OUT CALCULATOR
+  Three scale-out schedules:
+    Conservative: 50% at TP1, 30% at TP2, 20% trail
+    Balanced: 33% / 33% / 34% trail
+    Aggressive: 20% / 30% / 50% trail
+  
+  Per option: expected EV captured, guaranteed locked profit, remaining risk
+  "Lock in breakeven" calculator: at what close size does remaining risk = $0?
+
+MODULE 5 — STOP ADJUSTMENT ADVISOR
+  Rules-based:
+    1.5R achieved → move stop to breakeven
+    2.5R achieved → trail stop to 1R profit
+    Price reclaims key level → move stop to below that level
+  
+  Caution flags:
+    Don't trail in choppy regime
+    Don't trail in first 2 hours
+
+MODULE 6 — POST-TRADE DEBRIEF
+  After closing: actual price, P&L, exit reason, process score (1–5)
+  Auto-calculates: actual R vs planned R, EV accuracy
+  Feeds into Module 08 (Decision History Tracker)
+
+VISUALIZATION:
+  Trade P&L thermometer: vertical gauge SL (red) → TP3 (green)
+  Signal status panel: 4 cards (CVD, OI, Whale, Regime)
+  recharts LineChart: price path with entry/stop/TP reference lines
+
+TECH: React, recharts ComposedChart, Tailwind, localStorage for open positions.
+```
+
+-----
+
+## C7 · Strategy Backtest EV Validator
+
+**Tag:** `BACKTESTING`  
+**Depends on:** Module 05 (statistical testing), Module 08 (tracking)  
+**Used by:** C8 Master Dashboard (historical edge score)
+
+### Prompt
+
+```
+Build a Strategy Backtest EV Validator for a crypto trading app.
+
+CONTEXT:
+This module answers: "Is this backtest result a real edge or luck + data mining bias?"
+Every result that passes gets elevated to live trading. Everything else is discarded.
+
+MODULE 1 — TRADE HISTORY IMPORTER
+  Input: CSV upload OR manual entry
+  Required CSV columns: date | asset | direction | entry | exit | size | pnl | win (1/0) | regime_tag
+  Validation: detect duplicates, missing data, date range, assets covered
+
+MODULE 2 — CORE PERFORMANCE STATISTICS
+  Basic stats:
+    total_trades, win_rate, avg_win, avg_loss, R:R
+    total_pnl, profit_factor, max_drawdown, max_consecutive_losses
+    Sharpe ratio (annualized), Sortino ratio, Calmar ratio
+  
+  EV analysis:
+    EV per trade = (win_rate × avg_win) - (loss_rate × avg_loss)
+    Edge per dollar risked = EV / avg_loss
+    Kelly fraction = win_rate - (1-win_rate)/edge_ratio
+
+MODULE 3 — STATISTICAL SIGNIFICANCE TESTER
+  Binomial test: is win_rate significantly > 50%?
+    Z = (wins - n×0.5) / √(n×0.25), p-value
+  
+  Monte Carlo permutation test:
+    Shuffle trade outcomes 10,000×
+    If actual P&L > 95th percentile of random → p < 0.05 (significant)
+  
+  Flags:
+    n_trades < 100: "INSUFFICIENT SAMPLE"
+    n_trades < 30: "INVALID — DO NOT USE"
+
+MODULE 4 — REGIME BREAKDOWN ANALYSIS
+  If trades have regime tags, show performance breakdown:
+    Win rate / EV / Profit factor per regime
+  
+  Key output: "This strategy is +EV in TRENDING BULL but -EV in CHOPPY —
+               add regime filter!"
+
+MODULE 5 — EQUITY CURVE ANALYZER
+  recharts AreaChart: equity curve over time
+  Drawdown periods: red shading
+  Rolling 20-trade win rate: secondary axis
+  
+  Random equity curves overlay:
+    Show 20 random-walk curves alongside actual
+    If actual within random cloud → no proven edge
+
+MODULE 6 — FORWARD WALK VALIDATION
+  Split: first 70% in-sample / last 30% out-of-sample
+  Compare: win_rate, EV, profit factor IS vs OOS
+  
+  Degradation > 50%: HIGH overfitting risk → DISCARD
+  Degradation 20–50%: MODERATE — normal curve-fitting
+  Degradation < 20%: LOW — robust strategy
+  
+  Verdict: "PROCEED WITH LIVE TRADING" / "NEEDS MORE VALIDATION" / "LIKELY OVERFIT"
+
+VISUALIZATION:
+  Equity curve recharts AreaChart
+  Performance heatmap: day × hour grid (recharts or custom)
+  Regime breakdown recharts BarChart
+  Statistical significance bell curve with actual result marked
+
+TECH: React, recharts, Papaparse for CSV, Tailwind, Monte Carlo in vanilla JS.
+```
+
+-----
+
+## C8 · Crypto Probability Master Dashboard
+
+**Tag:** `MASTER VIEW`  
+**Depends on:** All C1–C7 modules + Module 01 (EV) + Module 02 (Kelly)  
+**Used by:** Final GO / NO GO decision before every trade entry
+
+### Prompt
+
+```
+Build the Crypto Probability Master Dashboard — unified command center that
+integrates all modules into a single pre-trade readiness score.
+
+CONTEXT:
+Before entering any trade, a professional must answer 7 questions clearly.
+This dashboard answers all 7 simultaneously and produces a GO / WAIT / NO GO signal.
+
+THE 7 PRE-TRADE QUESTIONS:
+  1. Does this setup have +EV? (from C1 Trade Calculator)
+  2. Am I sizing correctly? (from Kelly Criterion)
+  3. Is funding working for or against me? (from C2 Funding Analyzer)
+  4. Are there major liquidation zones near my SL? (from C3 Liq Map)
+  5. What do on-chain signals say about direction? (from C4 Signal Aggregator)
+  6. Is current regime compatible with this strategy? (from C5 Regime Detector)
+  7. Does my historical edge support this trade type? (from C7 Backtest Validator)
+
+TRADE READINESS SCORE ENGINE:
+  Each module contributes a sub-score (0–10):
+  
+  1. EV score:
+     EV < 0 → 0 | EV $0–50 → 4 | EV $50–200 → 7 | EV > $200 → 10
+  
+  2. Sizing score:
+     Kelly fraction used appropriately → 10
+     Oversized vs. Kelly → penalty proportional to excess
+  
+  3. Funding score:
+     Funding in your favor → 10
+     Funding neutral → 6
+     Funding against you → 3
+     Extreme funding against → 0
+  
+  4. Liquidation score:
+     No major cluster within 3% of SL → 10
+     Major cluster at SL → 0
+  
+  5. On-chain conviction score: (from C4 output, 0–10)
+  
+  6. Regime compatibility score:
+     Regime matches strategy → 10
+     Marginal match → 5
+     Incompatible → 0
+     Regime in transition → 3
+  
+  7. Historical edge score:
+     Statistically significant + regime-confirmed → 10
+     Not yet significant (insufficient sample) → 5
+     Strategy -EV in current regime → 0
+  
+  WEIGHTS:
+    EV: 20% | Sizing: 10% | Funding: 15% | Liquidation: 10%
+    On-chain: 20% | Regime: 15% | Historical Edge: 10%
+  
+  Final Score = weighted average × 10 = 0–100 points
+  
+  VERDICT:
+    0–39:  🔴 NO GO — Multiple factors against this trade
+    40–59: 🟡 WAIT — Setup needs improvement
+    60–74: 🟠 CONDITIONAL GO — Take smaller size
+    75–89: 🟢 GO — Good setup, standard size
+    90–100: 🟢🟢 HIGH CONVICTION — Consider scaling up (within Kelly)
+
+DASHBOARD LAYOUT:
+
+  TOP BAR: Asset | Direction | Entry Price | Current Score | VERDICT badge
+  
+  SCORE BREAKDOWN (left panel):
+    7 horizontal bars, one per question
+    Each bar: score/10, color, one-line status text
+    Example: "Regime: 8/10 — Trending bull, momentum confirmed ✓"
+  
+  QUICK INPUT (right panel):
+    Compact fields for each module
+    Pre-populate from previous session
+    "Refresh all signals" button
+  
+  TRADE SUMMARY (bottom card):
+    Entry / SL / TP1 / TP2 / TP3
+    Position size | Kelly fraction used
+    EV ($) | R:R | Win probability
+    7-day funding cost projection
+    Net EV after funding
+
+IMPROVEMENT SUGGESTIONS ENGINE:
+  Low EV → "Move TP2 from $X to $Y to improve R:R from 1.8 to 2.4"
+  Bad funding → "Consider waiting for funding reset at 8:00 UTC"
+  Regime mismatch → "This breakout strategy has -EV in current choppy regime"
+  Near liq cluster → "Major $45M liq cluster 2.1% below your SL — move stop"
+
+ACTION BUTTONS:
+  [SAVE SETUP] → logs to Decision History (Module 08)
+  [COPY TO TERMINAL] → formats as structured text
+  [WHAT'S HOLDING ME BACK?] → highlights lowest-scoring modules
+
+SESSION SUMMARY (end of day):
+  Trades evaluated | Trades taken (GO+) | Trades avoided (NO GO)
+  Estimated EV saved by avoiding bad setups
+  Accuracy of GO verdict for resolved trades
+
+TECH: React with context/state, recharts, Tailwind, localStorage for full
+session persistence. All 7 module inputs stored globally so switching between
+modules pre-fills data.
+```
+
+-----
+
+## Appendix: Integration Map
+
+### Data flows between modules
+
+```
+Module 01 (EV) ──────────────────────────────────────────→ C1, C8
+Module 02 (Kelly) ───────────────────────────────────────→ C1, C8
+Module 03 (Bayes) ───────────────────────────────────────→ C4
+Module 05 (Stats) ───────────────────────────────────────→ C7
+Module 08 (Tracker) ─────────────────────────────────────→ feeds from all
+
+C1 (Trade Setup) ────────────────────────────────────────→ C2, C6, C8
+C2 (Funding) ────────────────────────────────────────────→ C6, C8
+C3 (Liq Map) ────────────────────────────────────────────→ C8
+C4 (On-Chain) ───────────────────────────────────────────→ C1 (win_prob), C8
+C5 (Regime) ─────────────────────────────────────────────→ C1, C4, C6, C8
+C6 (Live Trade) ─────────────────────────────────────────→ Module 08
+C7 (Backtest) ───────────────────────────────────────────→ C8 (historical edge score)
+C8 (Master) ─────────────────────────────────────────────→ GO / NO GO
+```
+
+### Shared state schema (if building as a single app)
+
+```javascript
+const AppState = {
+  // From Part I
+  ev_scenarios: [],          // Module 01
+  kelly_config: {},          // Module 02
+  bayesian_chain: [],        // Module 03
+  decision_history: [],      // Module 08
+
+  // From Part II
+  current_trade: {
+    asset, direction, entry, sl, tp1, tp2, tp3,
+    position_size, leverage, win_probability,
+    ev_net, rr_weighted, quality_score,
+  },
+  funding_state: {},         // C2
+  liquidation_zones: [],     // C3
+  onchain_signals: {},       // C4
+  current_regime: {},        // C5
+  open_positions: [],        // C6
+  backtest_results: {},      // C7
+  master_score: null,        // C8
+  master_verdict: null,      // C8
+}
+```
+
+### Recommended tech stack
+
+|Layer      |Choice                                    |
+|-----------|------------------------------------------|
+|Framework  |React 18 (hooks)                          |
+|Styling    |Tailwind CSS                              |
+|Charts     |recharts                                  |
+|CSV parsing|Papaparse                                 |
+|State      |useState + useReducer + Context           |
+|Storage    |localStorage (MVP), IndexedDB (production)|
+|Math       |vanilla JS (no external math libs needed) |
+
+-----
+
+*Generated from: “Being Right and Making Money Are Two Different Things” — @polydao*  
+*Combined EV Framework (8 modules) + Crypto Trading Layer (8 modules) = 16 total prompts*

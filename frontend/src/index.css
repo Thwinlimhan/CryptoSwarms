@@ -1,28 +1,27 @@
 :root {
-  /* White Terminal Aesthetic */
   --bg-primary: #000000;
-  --bg-panel: #0a0a0a;
-  --bg-panel-border: #222222;
-  --bg-highlight: #111111;
-  
-  --text-primary: #ffffff; /* White Text */
-  --text-primary-glow: rgba(255, 255, 255, 0.2);
-  --text-secondary: #aaaaaa;
+  --bg-panel: #000000;
+  --bg-panel-border: #1a1a1a;
+  --bg-highlight: #0a0a0a;
+
+  --text-primary: #ffffff;
+  --text-primary-glow: rgba(255, 157, 0, 0.3);
+  --text-amber: #ff9d00;
+  --text-secondary: #888888;
   --text-muted: #444444;
   
-  --accent-alert: #ff0000;
-  --accent-warn: #fbbf24;
-  --accent-info: #ffffff;
-  --accent-purple: #ffffff;
-  --accent-pink: #ffffff;
-  --accent-cyan: #ffffff;
-  --accent-gold: #fbbf24;
+  --accent-alert: #ff3b3b;
+  --accent-warn: #ff9d00;
+  --accent-info: #00ff41; 
+  --accent-purple: #a855f7;
+  --accent-cyan: #00e5ff;
+  --accent-gold: #ff9d00;
 
-  --font-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', 'Courier New', Courier, monospace;
+  --font-mono: 'JetBrains Mono', 'Space Mono', 'Fira Code', monospace;
   
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --premium-shadow: 0 0 20px rgba(255, 255, 255, 0.05);
+  --glass-bg: transparent;
+  --glass-border: #1a1a1a;
+  --premium-shadow: none;
 }
 
 * {

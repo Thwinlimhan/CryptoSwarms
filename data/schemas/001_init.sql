@@ -28,6 +28,7 @@ SELECT create_hypertable('signals', 'time', if_not_exists => TRUE);
 
 -- Trades (paper + live, slippage tracked)
 CREATE TABLE IF NOT EXISTS trades (
+  id UUID DEFAULT gen_random_uuid(),
   time TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   exchange TEXT NOT NULL,
   symbol TEXT NOT NULL,

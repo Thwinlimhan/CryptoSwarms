@@ -1,4 +1,4 @@
-from cryptoswarms.adapters import PostgresSqlExecutor, RedisKeyValueStore
+from cryptoswarms import PostgresSqlExecutor, RedisKeyValueStore
 
 
 class FakeRedis:

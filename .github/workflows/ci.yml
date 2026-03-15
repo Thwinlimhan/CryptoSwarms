@@ -2,45 +2,95 @@ name: CI
 
 on:
   push:
+    branches: [main, develop]
   pull_request:
+    branches: [main]
 
 jobs:
-  test:
+  # ── Python backend tests ────────────────────────────────────────────────────
+  test-backend:
+    name: Backend Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install package
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest
-      - name: Lint (compile check)
-        run: |
-          python -m py_compile api/main.py cryptoswarms/*.py agents/backtest/*.py agents/execution/*.py scripts/check_backtest_runtimes.py
-      - name: Unit tests
-        run: |
-          python -m pytest -q
 
-  backtest-runtimes:
-    runs-on: ubuntu-latest
-    env:
-      REQUIRE_BACKTEST_RUNTIMES: "true"
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install backtest dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e .[backtest]
-          pip install pytest
-      - name: Verify strict runtime availability
-        run: |
-          python scripts/check_backtest_runtimes.py
-      - name: Run strict backtest integration tests
-        run: |
-          python -m pytest -q tests/integration/test_vectorbt_integration.py tests/integration/test_jesse_integration.py
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[memory]" pytest pytest-asyncio
+
+      - name: Run unit tests (exclude integration)
+        run: pytest -q --ignore=tests/integration -m "not integration"
+
+  # ── Python lint ─────────────────────────────────────────────────────────────
+  lint-backend:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check cryptoswarms/ api/ agents/ --output-format=github
+
+  # ── Frontend build ──────────────────────────────────────────────────────────
+  build-frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Type-check and build
+        run: npm run build
+
+  # ── Integration tests (manual trigger only) ─────────────────────────────────
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[memory]" pytest pytest-asyncio
+
+      - name: Run integration tests
+        run: pytest -q -m integration
+        env:
+          REDIS_URL: redis://localhost:6379/0

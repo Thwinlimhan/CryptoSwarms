@@ -1,0 +1,16 @@
+Backtest Report: Swarm Breakout Trend
+Symbol: BTCUSDT
+Period: 30 days
+
+total_trades: 53
+wins: 25
+losses: 28
+win_rate: 47.2%
+total_pnl: $-16.79
+avg_win: $7.18
+avg_loss: $-7.01
+biggest_win: $25.01
+biggest_loss: $-21.22
+profit_factor: 0.91
+open_positions: 1
+portfolio_heat: $625.00

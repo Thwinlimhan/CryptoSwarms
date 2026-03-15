@@ -1,7 +1,7 @@
 import { GitBranch, Target, Layers, Zap } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-const API_URL = "http://127.0.0.1:8000";
+import { apiRequest } from '../api';
 
 interface Trace {
   time: string;
@@ -25,8 +25,7 @@ export default function Attribution() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/decision/attribution-lineage?limit=50`)
-      .then(res => res.json())
+    apiRequest<AttributionData>('/api/decision/attribution-lineage?limit=50')
       .then(data => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));

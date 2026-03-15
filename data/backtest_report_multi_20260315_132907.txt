@@ -1,0 +1,16 @@
+Multi-Asset Backtest Report: Institutional Mean Reversion
+Symbols: BTCUSDT, ETHUSDT, SOLUSDT
+Period: 14 days
+
+total_trades: 51
+wins: 16
+losses: 35
+win_rate: 31.4%
+total_pnl: $-79.94
+avg_win: $5.10
+avg_loss: $-4.62
+biggest_win: $13.05
+biggest_loss: $-9.55
+profit_factor: 0.51
+open_positions: 1
+portfolio_heat: $416.67

@@ -1,5 +1,5 @@
 import { TerminalSquare, ChevronRight, TrendingUp, Activity } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   XAxis, 
   YAxis, 
@@ -10,8 +10,8 @@ import {
   Area
 } from 'recharts';
 
-const API_URL = "http://127.0.0.1:8000";
-
+import { useApi } from '../hooks/useApi';
+import { apiRequest } from '../api';
 interface Strategy {
   id: string;
   name: string;
@@ -20,48 +20,66 @@ interface Strategy {
 }
 
 interface BacktestResult {
+  _synthetic?: boolean;
+  _warning?: string;
   strategy_id: string;
-  total_pnl: number;
-  sharpe: number;
-  win_rate: number;
-  trades: number;
-  max_drawdown: number;
-  equity_curve: { date: string, pnl: number, drawdown: number }[];
+  total_pnl?: number | null;
+  sharpe?: number | null;
+  win_rate?: number | null;
+  trades?: number | null;
+  max_drawdown?: number | null;
+  equity_curve?: { date: string; pnl: number; drawdown: number }[];
 }
 
 export default function Backtest() {
-  const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
   const [results, setResults] = useState<BacktestResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/backtest/strategies`)
-      .then(res => res.json())
-      .then(data => setStrategies(data))
-      .catch(console.error);
-  }, []);
+  const { data: fetchStrategies } = useApi<Strategy[]>('/api/backtest/strategies', 0);
+  const strategies = fetchStrategies || [];
 
   const handleSelect = (strat: Strategy) => {
     setSelectedStrategy(strat);
     setLoading(true);
-    fetch(`${API_URL}/api/backtest/results/${strat.id}`)
-      .then(res => res.json())
+    apiRequest<BacktestResult>(`/api/backtest/results/${strat.id}`)
       .then(data => setResults(data))
       .catch(console.error)
       .finally(() => setLoading(false));
   };
 
-  const runLiveBacktest = () => {
+  const runLiveBacktest = async () => {
     if (!selectedStrategy) return;
     setRunning(true);
-    // Simulate real-time progress
-    setTimeout(() => {
+    setResults(null);
+    try {
+      const data = await apiRequest<BacktestResult>(`/api/backtest/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          strategy_id: selectedStrategy.id,
+          days: 14,
+        }),
+      });
+      setResults(data);
+    } catch (e) {
+      console.error('Backtest run failed:', e);
+      setResults({
+        _synthetic: true,
+        _warning: e instanceof Error ? e.message : 'Backtest failed. Check API and strategy id.',
+        strategy_id: selectedStrategy.id,
+        total_pnl: 0,
+        sharpe: 0,
+        win_rate: 0,
+        trades: 0,
+        max_drawdown: 0,
+        equity_curve: [],
+      });
+    } finally {
       setRunning(false);
-      handleSelect(selectedStrategy);
-    }, 3000);
-  }
+    }
+  };
 
   // Group strategies by group
   const grouped = Array.isArray(strategies) ? strategies.reduce((acc, obj) => {
@@ -72,9 +90,9 @@ export default function Backtest() {
   }, {} as Record<string, Strategy[]>) : {};
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+    <div className="flex-column-gap-2">
       <header>
-        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <h2 className="flex-center-gap-05">
           <TerminalSquare size={24} /> 
           STRATEGY_QUANTS_CONSOLE
         </h2>
@@ -82,7 +100,7 @@ export default function Backtest() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '2rem', alignItems: 'start' }}>
         {/* Strategy List Sidebar */}
-        <div className="border-box" style={{ padding: '0' }}>
+        <div className="border-box p-0">
           <div style={{ padding: '1rem', borderBottom: '1px solid var(--bg-panel-border)', background: 'var(--bg-panel)' }}>
             <h4 style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>STRATEGY_GROUPS</h4>
           </div>
@@ -135,10 +153,10 @@ export default function Backtest() {
           )}
 
           {selectedStrategy && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div className="border-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="flex-column-gap-15">
+              <div className="border-box flex-between">
                 <div>
-                  <h3 style={{ margin: 0 }}>{selectedStrategy.name}</h3>
+                  <h3 className="m-0">{selectedStrategy.name}</h3>
                   <div className="text-muted" style={{ fontSize: '0.75rem' }}>ID: {selectedStrategy.id} // GROUP: {selectedStrategy.group}</div>
                 </div>
                 <button 
@@ -150,6 +168,19 @@ export default function Backtest() {
                 </button>
               </div>
 
+              {results?._synthetic && (
+                <div style={{ 
+                  background: 'rgba(255,165,0,0.1)', 
+                  border: '1px solid rgba(255,165,0,0.5)', 
+                  color: 'orange', 
+                  padding: '1rem', 
+                  fontSize: '0.85rem' 
+                }}>
+                  <strong>SYNTHETIC DATA: </strong> 
+                  {results._warning || "This data is generated for demo purposes. Not based on real backtests."}
+                </div>
+              )}
+
               {loading && <div className="blink">_FETCHING_STATISTICAL_MODELS...</div>}
 
               {results && !loading && (
@@ -157,19 +188,19 @@ export default function Backtest() {
                   <div className="grid grid-cols-4">
                     <div className="stat-card">
                       <div className="stat-label">TOTAL_PNL</div>
-                      <div className="stat-value text-primary">${results.total_pnl.toFixed(2)}</div>
+                      <div className="stat-value text-primary">${typeof results.total_pnl === 'number' ? results.total_pnl.toFixed(2) : "0.00"}</div>
                     </div>
                     <div className="stat-card">
                       <div className="stat-label">SHARPE_RATIO</div>
-                      <div className="stat-value">{results.sharpe.toFixed(2)}</div>
+                      <div className="stat-value">{typeof results.sharpe === 'number' ? results.sharpe.toFixed(2) : "0.00"}</div>
                     </div>
                     <div className="stat-card">
                       <div className="stat-label">WIN_RATE</div>
-                      <div className="stat-value text-info">{(results.win_rate * 100).toFixed(1)}%</div>
+                      <div className="stat-value text-info">{(typeof results.win_rate === 'number' ? results.win_rate * 100 : 0).toFixed(1)}%</div>
                     </div>
                     <div className="stat-card" style={{ borderColor: 'var(--accent-alert)' }}>
                       <div className="stat-label">MAX_DRAWDOWN</div>
-                      <div className="stat-value text-danger">{results.max_drawdown.toFixed(2)}</div>
+                      <div className="stat-value text-danger">{typeof results.max_drawdown === 'number' ? results.max_drawdown.toFixed(2) : "0.00"}</div>
                     </div>
                   </div>
 
@@ -185,14 +216,14 @@ export default function Backtest() {
                       </div>
                     </header>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    <div className="flex-column-gap-2">
                       {/* Section 1: Visual Performance */}
                       <div style={{ height: '450px' }}>
                         <h4 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                           <TrendingUp size={16} /> EQUITY_GROWTH_MODEL
                         </h4>
                         <ResponsiveContainer width="100%" height="90%">
-                          <AreaChart data={results.equity_curve}>
+                          <AreaChart data={results.equity_curve || []}>
                             <defs>
                               <linearGradient id="colorPnl" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="5%" stopColor="#00ff41" stopOpacity={0.2}/>

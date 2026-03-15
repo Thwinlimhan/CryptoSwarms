@@ -1,4 +1,4 @@
-import { Settings, Shield, Cpu, Database, Palette, Key, Zap } from 'lucide-react';
+import { Settings, Shield, Cpu, Palette, Key } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export default function SettingsView() {

@@ -1,7 +1,7 @@
 import { MessageSquare, CheckCircle, XCircle, Info } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-const API_URL = "http://127.0.0.1:8000";
+import { apiRequest } from '../api';
 
 interface Vote {
   solver_id: string;
@@ -30,8 +30,7 @@ export default function Council() {
 
   const fetchDebate = () => {
     setLoading(true);
-    fetch(`${API_URL}/api/decision/debate-preview`)
-      .then(res => res.json())
+    apiRequest<CouncilData>('/api/decision/debate-preview')
       .then(data => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));

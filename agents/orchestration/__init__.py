@@ -10,9 +10,9 @@ from .decision_council import (
     CouncilDecision,
     CouncilInput,
     DecisionCouncil,
-    ExecutionSolver,
-    ResearchSolver,
-    RiskSolver,
+    ProbabilitySolver,
+    MicrostructureSolver,
+    CalibrationSolver,
 )
 
 __all__ = [
@@ -49,7 +49,7 @@ __all__ = [
     "CouncilDecision",
     "CouncilInput",
     "DecisionCouncil",
-    "ExecutionSolver",
-    "ResearchSolver",
-    "RiskSolver",
+    "ProbabilitySolver",
+    "MicrostructureSolver",
+    "CalibrationSolver",
 ]

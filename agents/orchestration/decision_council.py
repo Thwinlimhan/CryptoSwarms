@@ -3,12 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from typing import Protocol, runtime_checkable
+
 from agents.orchestration.dag_memory_bridge import DagMemoryBridge
 from agents.orchestration.debate_protocol import DebateAggregate, DebateRound, DebateVote, aggregate_weighted, run_cross_critique
 from agents.orchestration.delegation_policy import DelegationPolicy, DelegationRequest
 from agents.orchestration.mcp_registry import MCPRegistry, default_mcp_registry
 from agents.orchestration.project_scope import ProjectScopeManager, default_project_scope_manager
 from agents.research.security_controls import GuardrailResult, input_guardrail, output_guardrail, tool_guardrail
+from agents.orchestration.skill_agent import SkillAgent
+import asyncer
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,7 @@ class CouncilConfig:
     min_go_confidence: float = 0.6
     allow_tools: tuple[str, ...] = ("read_metrics", "score_decision", "emit_report")
     mcp_max_risk_tier: str = "medium"
+    use_hyper_skills: bool = False
 
 
 @dataclass(frozen=True)
@@ -49,49 +54,82 @@ class CouncilDecision:
     decision_checkpoint_node_id: str | None
 
 
+@runtime_checkable
 class DebateSolver(Protocol):
     solver_id: str
 
-    def vote(self, payload: CouncilInput) -> DebateVote:
+    async def vote(self, payload: CouncilInput) -> DebateVote:
         ...
 
 
 @dataclass(frozen=True)
-class ResearchSolver:
-    solver_id: str = "research_solver"
+class ProbabilitySolver:
+    """The Probability Architect (Phase 11 soul)"""
+    solver_id: str = "probability_architect"
 
-    def vote(self, payload: CouncilInput) -> DebateVote:
-        stance = "go" if payload.posterior_probability >= 0.58 and payload.expected_value_after_costs_usd > 0 else "hold"
-        confidence = min(0.95, max(0.2, payload.posterior_probability))
-        return DebateVote(
-            solver_id=self.solver_id,
-            stance=stance,
-            confidence=round(confidence, 4),
-            rationale="posterior+EV assessment",
-        )
+    async def vote(self, payload: CouncilInput) -> DebateVote:
+        ev_ok = payload.expected_value_after_costs_usd > 5.0  # Min $5 EV hurdle
+        post_ok = payload.posterior_probability >= 0.58
+        
+        stance = "go" if ev_ok and post_ok else "hold"
+        # Confidence is anchored to the posterior but tempered by EV
+        confidence = min(0.92, payload.posterior_probability)
+        
+        rationale = f"EV=${payload.expected_value_after_costs_usd:.2f}, post={payload.posterior_probability:.4f}"
+        return DebateVote(self.solver_id, stance, confidence, rationale)
 
 
 @dataclass(frozen=True)
-class RiskSolver:
-    solver_id: str = "risk_solver"
+class MicrostructureSolver:
+    """The Microstructure Oracle (Phase 12 soul)"""
+    solver_id: str = "microstructure_oracle"
 
-    def vote(self, payload: CouncilInput) -> DebateVote:
-        if payload.risk_halt_active:
-            return DebateVote(self.solver_id, "hold", 0.95, "risk halt active")
+    async def vote(self, payload: CouncilInput) -> DebateVote:
+        # Heavily weighted toward scorecard and institutional gates (positioning)
         stance = "go" if payload.scorecard_eligible and payload.institutional_gate_ok else "hold"
-        confidence = 0.8 if stance == "go" else 0.88
-        return DebateVote(self.solver_id, stance, confidence, "promotion/risk gate assessment")
+        confidence = 0.82 if stance == "go" else 0.88
+        return DebateVote(self.solver_id, stance, confidence, "market positioning + sig check")
 
 
 @dataclass(frozen=True)
-class ExecutionSolver:
-    solver_id: str = "execution_solver"
+class CalibrationSolver:
+    """The Calibration Governor (Phase 13 soul)"""
+    solver_id: str = "calibration_governor"
 
-    def vote(self, payload: CouncilInput) -> DebateVote:
+    async def vote(self, payload: CouncilInput) -> DebateVote:
+        # Aggregates attribution and readiness status
         ready = payload.attribution_ready and payload.strategy_count_ok
-        stance = "go" if ready else "hold"
-        confidence = 0.78 if stance == "go" else 0.92
-        return DebateVote(self.solver_id, stance, confidence, "execution readiness assessment")
+        stance = "go" if ready and not payload.risk_halt_active else "hold"
+        confidence = 0.85 if stance == "go" else 0.95
+        return DebateVote(self.solver_id, stance, confidence, "meta-calibration + readiness")
+
+
+class SkillSolver:
+    """A solver that delegates to a HyperSpace Skill.md agent."""
+    def __init__(self, skill_name: str):
+        self.agent = SkillAgent(skill_name)
+        self.solver_id = skill_name
+
+    async def vote(self, payload: CouncilInput) -> DebateVote:
+        # Convert dataclass to dict for SkillAgent
+        data = {
+            "strategy_id": payload.strategy_id,
+            "scorecard_eligible": payload.scorecard_eligible,
+            "institutional_gate_ok": payload.institutional_gate_ok,
+            "attribution_ready": payload.attribution_ready,
+            "risk_halt_active": payload.risk_halt_active,
+            "strategy_count_ok": payload.strategy_count_ok,
+            "expected_value_after_costs_usd": payload.expected_value_after_costs_usd,
+            "posterior_probability": payload.posterior_probability,
+            "project_id": payload.project_id
+        }
+        res = await self.agent.execute(data)
+        return DebateVote(
+            solver_id=res.get("solver_id", self.solver_id),
+            stance=res.get("stance", "hold"),
+            confidence=float(res.get("confidence", 0.0)),
+            rationale=res.get("rationale", "skill execution")
+        )
 
 
 class DecisionCouncil:
@@ -105,14 +143,24 @@ class DecisionCouncil:
         mcp_registry: MCPRegistry | None = None,
         delegation_policy: DelegationPolicy | None = None,
     ) -> None:
-        self.solvers = solvers or [ResearchSolver(), RiskSolver(), ExecutionSolver()]
+        if solvers:
+            self.solvers = solvers
+        elif config.use_hyper_skills:
+            self.solvers = [
+                SkillSolver("probability_architect"),
+                SkillSolver("microstructure_oracle"),
+                SkillSolver("calibration_governor")
+            ]
+        else:
+            self.solvers = [ProbabilitySolver(), MicrostructureSolver(), CalibrationSolver()]
+            
         self.config = config
         self.dag_bridge = dag_bridge
         self.project_scope_manager = project_scope_manager or default_project_scope_manager()
         self.mcp_registry = mcp_registry or default_mcp_registry()
         self.delegation_policy = delegation_policy or DelegationPolicy()
 
-    def decide(self, payload: CouncilInput) -> CouncilDecision:
+    async def decide(self, payload: CouncilInput) -> CouncilDecision:
         stages: list[str] = []
         dag_context_ids: list[str] = []
 

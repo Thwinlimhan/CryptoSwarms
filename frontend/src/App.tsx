@@ -1,10 +1,10 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { 
-  Terminal, 
-  Activity, 
-  Database, 
-  Code2, 
+import {
+  Terminal,
+  Activity,
+  Database,
+  Code2,
   Network,
   Users,
   Share2,
@@ -12,9 +12,16 @@ import {
   Cpu,
   DollarSign,
   Search,
-  Settings
+  Settings,
+  Calculator,
+  AlertTriangle,
+  BarChart3,
+  Beaker
 } from 'lucide-react';
 import './App.css';
+
+import { apiRequest } from './api';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Views
 import Dashboard from './views/Dashboard';
@@ -28,6 +35,10 @@ import Attribution from './views/Attribution';
 import Orchestration from './views/Orchestration';
 import ResearchHub from './views/ResearchHub';
 import SettingsView from './views/Settings';
+import { MasterDashboard } from './views/ev/MasterDashboard';
+import FailureLedger from './views/FailureLedger';
+import PaperTrading from './views/PaperTrading';
+import ResearchLab from './views/ResearchLab';
 
 function Sidebar() {
   const location = useLocation();
@@ -36,13 +47,13 @@ function Sidebar() {
   return (
     <div className="sidebar">
       <div className="sidebar-header">
-        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0, color: '#ff9d00', fontWeight: '900', letterSpacing: '0.1em' }}>
           <Network size={20} />
           SWARM_OS
         </h2>
-        <div className="text-muted" style={{ fontSize: '0.7em', marginTop: '0.5rem' }}>v6.0.0-rc1 // SECURE</div>
+        <div className="text-slate-600 font-mono text-[8px] mt-2 uppercase tracking-widest">v6.0.0-rc1 // SECURE_SOCKET</div>
       </div>
-      
+
       <nav className="sidebar-nav">
         <Link to="/" className={`nav-item ${path === '/' ? 'active' : ''}`}>
           <Terminal size={18} />
@@ -68,12 +79,16 @@ function Sidebar() {
           <DollarSign size={18} />
           <span>BURN_RATES</span>
         </Link>
-        
+
         <div className="sidebar-divider">ANALYSIS_LAYERS</div>
-        
+
         <Link to="/council" className={`nav-item ${path === '/council' ? 'active' : ''}`}>
           <Users size={18} />
           <span>DECISION_COUNCIL</span>
+        </Link>
+        <Link to="/ev" className={`nav-item ${path === '/ev' ? 'active' : ''}`}>
+          <Calculator size={18} />
+          <span>EV_MODEL</span>
         </Link>
         <Link to="/memory" className={`nav-item ${path === '/memory' ? 'active' : ''}`}>
           <Share2 size={18} />
@@ -91,6 +106,18 @@ function Sidebar() {
           <Settings size={18} />
           <span>SETTINGS</span>
         </Link>
+        <Link to="/failure-ledger" className={`nav-item ${path === '/failure-ledger' ? 'active' : ''}`}>
+          <AlertTriangle size={18} />
+          <span>FAILURE_LEDGER</span>
+        </Link>
+        <Link to="/research-lab" className={`nav-item ${path === '/research-lab' ? 'active' : ''}`}>
+          <Beaker size={18} />
+          <span>RESEARCH_LAB</span>
+        </Link>
+        <Link to="/paper" className={`nav-item ${path === '/paper' ? 'active' : ''}`}>
+          <BarChart3 size={18} />
+          <span>PAPER_TRADING</span>
+        </Link>
       </nav>
 
       <div className="sidebar-footer">
@@ -106,11 +133,10 @@ function App() {
   useEffect(() => {
     const updateTicker = async () => {
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/dashboard/overview');
-        const data = await res.json();
+        const data = await apiRequest<{ signals_today: number; healthy_agent_count: number; total_agent_count: number; dag_memory: { node_count: number } }>('/api/dashboard/overview');
         const msg = `[SIGNALS_TODAY]: ${data.signals_today} | [HEALTHY_AGENTS]: ${data.healthy_agent_count}/${data.total_agent_count} | [DAG_SIZE]: ${data.dag_memory.node_count} nodes`;
         setTicker(msg);
-      } catch (e) {
+      } catch {
         setTicker("SYS_ERROR: API_OFFLINE");
       }
     };
@@ -125,26 +151,32 @@ function App() {
         <Sidebar />
         <main className="main-content">
           <header className="top-bar">
-             <div className="ticker-wrapper">
-               <div className="ticker-label">LIVE_TELEMETRY</div>
-               <div className="ticker-text">{ticker}</div>
+             <div className="ticker-wrapper !bg-[#ff9d00]/5 !border-[#ff9d00]/20">
+               <div className="ticker-label !text-[#ff9d00]">LIVE_TELEMETRY</div>
+               <div className="ticker-text !text-white/80">{ticker}</div>
              </div>
-             <div className="text-muted" style={{ fontSize: '0.8rem' }}>{new Date().toISOString().split('T')[0]} // SECURE_SOCKET</div>
+             <div className="text-slate-700 font-mono text-[10px] tracking-widest">{new Date().toISOString().split('T')[0]} // SECURE_NODE</div>
           </header>
           <div className="page-container">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/research" element={<ResearchHub />} />
-              <Route path="/backtest" element={<Backtest />} />
-              <Route path="/data" element={<DataSources />} />
-              <Route path="/code" element={<CodeViewer />} />
-              <Route path="/costs" element={<Costs />} />
-              <Route path="/council" element={<Council />} />
-              <Route path="/memory" element={<MemoryDAG />} />
-              <Route path="/attribution" element={<Attribution />} />
-              <Route path="/orchestration" element={<Orchestration />} />
-              <Route path="/settings" element={<SettingsView />} />
-            </Routes>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/research" element={<ResearchHub />} />
+                <Route path="/backtest" element={<Backtest />} />
+                <Route path="/data" element={<DataSources />} />
+                <Route path="/code" element={<CodeViewer />} />
+                <Route path="/ev" element={<MasterDashboard />} />
+                <Route path="/costs" element={<Costs />} />
+                <Route path="/council" element={<Council />} />
+                <Route path="/memory" element={<MemoryDAG />} />
+                <Route path="/attribution" element={<Attribution />} />
+                <Route path="/orchestration" element={<Orchestration />} />
+                <Route path="/settings" element={<SettingsView />} />
+                <Route path="/failure-ledger" element={<FailureLedger />} />
+                <Route path="/research-lab" element={<ResearchLab />} />
+                <Route path="/paper" element={<PaperTrading />} />
+              </Routes>
+            </ErrorBoundary>
           </div>
         </main>
       </div>

@@ -1,7 +1,7 @@
 import { DollarSign, Flame } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-const API_URL = "http://127.0.0.1:8000";
+import { apiRequest } from '../api';
 
 interface BudgetData {
   spent_usd: number;
@@ -15,6 +15,7 @@ interface CostEvent {
   agent: string;
   model: string;
   total_usd: number;
+  _estimated?: boolean;
 }
 
 export default function Costs() {
@@ -22,13 +23,11 @@ export default function Costs() {
   const [dailyCosts, setDailyCosts] = useState<CostEvent[]>([]);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/costs/budget?spent_usd=0.09`)
-      .then(res => res.json())
+    apiRequest<BudgetData>('/api/costs/budget?spent_usd=0.09')
       .then(data => setBudget(data))
       .catch(console.error);
 
-    fetch(`${API_URL}/api/costs/daily`)
-      .then(res => res.json())
+    apiRequest<CostEvent[]>('/api/costs/daily')
       .then(data => setDailyCosts(data))
       .catch(console.error);
   }, []);
@@ -69,7 +68,10 @@ export default function Costs() {
                   <tr key={i}>
                     <td className="text-secondary">{c.agent.toUpperCase()}</td>
                     <td>{c.model}</td>
-                    <td className="text-primary">${c.total_usd.toFixed(4)}</td>
+                    <td className="text-primary">
+                      ${c.total_usd.toFixed(4)} 
+                      {c._estimated && <span className="text-muted" style={{ fontSize: '0.8em', marginLeft: '0.5rem' }}>(est.)</span>}
+                    </td>
                   </tr>
                 ))}
                 {dailyCosts.length === 0 && (

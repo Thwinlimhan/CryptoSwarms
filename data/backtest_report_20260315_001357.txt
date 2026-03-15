@@ -1,0 +1,6 @@
+Backtest Report: Swarm Breakout Trend
+Symbol: BTCUSDT
+Period: 90 days
+
+trades: 0
+message: No closed trades yet

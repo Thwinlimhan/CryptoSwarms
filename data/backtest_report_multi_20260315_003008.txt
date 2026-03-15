@@ -1,0 +1,6 @@
+Multi-Asset Backtest Report: Trend Momentum Rider
+Symbols: BTCUSDT, ETHUSDT, SOLUSDT
+Period: 30 days
+
+trades: 0
+message: No closed trades yet

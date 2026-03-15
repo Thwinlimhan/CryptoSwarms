@@ -1,7 +1,7 @@
 import { Cpu, Zap, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-const API_URL = "http://127.0.0.1:8000";
+import { apiRequest } from '../api';
 
 interface SubagentResult {
   task_id: string;
@@ -26,8 +26,7 @@ export default function Orchestration() {
 
   const runSim = (tasks = 6) => {
     setLoading(true);
-    fetch(`${API_URL}/api/orchestration/subagents-preview?tasks=${tasks}`)
-      .then(res => res.json())
+    apiRequest<PerformanceData>('/api/orchestration/subagents-preview?tasks=' + tasks)
       .then(data => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));

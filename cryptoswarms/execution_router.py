@@ -26,7 +26,7 @@ class RoutedOrderDecision:
 
 
 class OrderExecutor(Protocol):
-    def execute(self, intent: OrderIntent, reduce_only: bool = False) -> None: ...
+    async def execute(self, intent: OrderIntent, reduce_only: bool = False) -> None: ...
 
 
 class ExecutionRouter:
@@ -35,7 +35,7 @@ class ExecutionRouter:
     def __init__(self, executor: OrderExecutor) -> None:
         self._executor = executor
 
-    def route(
+    async def route(
         self,
         *,
         intent: OrderIntent,
@@ -54,11 +54,11 @@ class ExecutionRouter:
         )
 
         if gate.allow_entries:
-            self._executor.execute(intent, reduce_only=False)
+            await self._executor.execute(intent, reduce_only=False)
             return RoutedOrderDecision(True, "accepted", False, gate)
 
         if gate.allow_reductions_only and intent.reduce_only:
-            self._executor.execute(intent, reduce_only=True)
+            await self._executor.execute(intent, reduce_only=True)
             return RoutedOrderDecision(True, "accepted (reductions-only mode)", True, gate)
 
         return RoutedOrderDecision(False, gate.blocked_reason or "blocked by gate", gate.allow_reductions_only, gate)

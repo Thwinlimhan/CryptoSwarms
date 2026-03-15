@@ -1,7 +1,7 @@
 import { Database, Network } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-const API_URL = "http://127.0.0.1:8000";
+import { apiRequest } from '../api';
 
 interface ReadinessCheck {
   redis: boolean;
@@ -15,8 +15,7 @@ export default function DataSources() {
   const [readiness, setReadiness] = useState<ReadinessCheck | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/health/ready`)
-      .then(res => res.json())
+    apiRequest<{ checks: ReadinessCheck }>('/api/health/ready')
       .then(data => setReadiness(data.checks))
       .catch(console.error);
   }, []);

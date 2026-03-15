@@ -14,6 +14,11 @@ services:
     restart: always
     ports:
       - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d swarm_db -U swarm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -21,42 +26,12 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
-#  qdrant:
-#    image: qdrant/qdrant:latest
-#    volumes:
-#      - qdrant_data:/qdrant/storage
-#    restart: always
-#    ports:
-#      - "6333:6333"
-
-#  neo4j:
-#    image: neo4j:5
-#    environment:
-#      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
-#      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
-#    restart: always
-#    ports:
-#      - "7474:7474"
-#      - "7687:7687"
-#    volumes:
-#      - neo4j_data:/data
-
-  # ── LOCAL LLM ─────────────────────────────────────────────────
-#  sglang:
-#    image: lmsysorg/sglang:latest
-#    runtime: nvidia
-#    command: >
-#      python -m sglang.launch_server
-#      --model-path Qwen/Qwen2.5-VL-7B-Instruct
-#      --port 30000 --mem-fraction-static 0.4
-#    restart: always
-#    ports:
-#      - "30000:30000"
-#    volumes:
-#      - ~/.cache/huggingface:/root/.cache/huggingface
-
-  # ── CAMOUFOX REST SERVER ───────────────────────────────────────
   camoufox:
     image: ghcr.io/redf0x1/camofox-browser:latest
     environment:
@@ -76,24 +51,42 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       DB_URL: postgresql://swarm:${DB_PASSWORD}@timescaledb:5432/swarm_db
-      NEO4J_URL: bolt://neo4j:7687
-      QDRANT_URL: http://qdrant:6333
-      SGLANG_URL: http://sglang:30000
       CAMOUFOX_URL: http://camoufox:8080
       LANGCHAIN_TRACING_V2: ${LANGCHAIN_TRACING_V2}
       LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
       LANGCHAIN_PROJECT: ${LANGCHAIN_PROJECT}
     depends_on:
-      - redis
-      - timescaledb
-#      - neo4j
-#      - qdrant
-#      - sglang
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    secrets:
+      - db_password
+      - exchange_key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     ports:
       - "8000:8000"
     networks:
       - research_net
       - execution_net
+
+  # ── CRYPTO SWARMS FRONTEND ─────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:80"
+    depends_on:
+      - swarm-api
+    networks:
+      - research_net
 
   # ── MISSION CONTROL ────────────────────────────────────────────
   mission-control:
@@ -113,6 +106,29 @@ services:
       - "3000:3000"
     volumes:
       - mission_control_data:/app/.data
+
+  # ── HYPERLIQUID PAPER TRADING (HyPaper) ────────────────────────
+  hypaper:
+    build:
+      context: ./hypaper-backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://swarm:${DB_PASSWORD}@timescaledb:5432/swarm_db
+      - REDIS_URL=redis://redis:6379
+      - PORT=3000
+      - DEFAULT_BALANCE=100000
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+      timescaledb:
+        condition: service_healthy
+    networks:
+      - research_net
+      - execution_net
+    restart: unless-stopped
 
   # ── OBSERVABILITY ─────────────────────────────────────────────
   deepflow-server:
@@ -144,15 +160,21 @@ services:
       - /sys/kernel/debug:/sys/kernel/debug:ro
       - /proc:/proc:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  exchange_key:
+    file: ./secrets/exchange_key.txt
+
 networks:
   research_net:
   execution_net:
 
 volumes:
   timescale_data:
-  qdrant_data:
-  neo4j_data:
   mission_control_data:
+  # qdrant_data:  # uncomment when qdrant service is enabled
+  # neo4j_data:   # uncomment when neo4j service is enabled
 
 
 

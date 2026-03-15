@@ -1,0 +1,16 @@
+Multi-Asset Backtest Report: Trend Momentum Rider
+Symbols: BTCUSDT, ETHUSDT, SOLUSDT
+Period: 14 days
+
+total_trades: 50
+wins: 22
+losses: 28
+win_rate: 44.0%
+total_pnl: $59.05
+avg_win: $18.23
+avg_loss: $-12.22
+biggest_win: $72.64
+biggest_loss: $-30.25
+profit_factor: 1.17
+open_positions: 3
+portfolio_heat: $2625.00

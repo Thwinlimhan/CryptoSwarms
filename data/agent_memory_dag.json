@@ -58,8 +58,8 @@
           "dissent_ratio": 0.0,
           "vote_count": 3
         },
-        "provenance_confidence": 1.0,
-        "age_hours": 0.0
+        "provenance_confidence": 0.8112,
+        "age_hours": 21.737
       }
     },
     {
@@ -90,8 +90,72 @@
           "dissent_ratio": 0.0,
           "vote_count": 3
         },
+        "provenance_confidence": 0.8112,
+        "age_hours": 21.737
+      }
+    },
+    {
+      "node_id": "dc88341c89b5",
+      "node_type": "decision_checkpoint",
+      "topic": "default::phase1-btc-breakout-15m",
+      "content": "decision=go conf=1.000 dissent=0.000 reason=governor passed",
+      "created_at": "2026-03-13T11:34:15.397065+00:00",
+      "metadata": {
+        "project_id": "default",
+        "strategy_id": "phase1-btc-breakout-15m",
+        "passed_governor": true,
+        "stages": [
+          "project_scope_strategy",
+          "project_scope_secrets",
+          "input_guardrail",
+          "dag_recall",
+          "mcp_registry_guard",
+          "tool_guardrail",
+          "a2a_delegation_guard",
+          "debate_attempt_1",
+          "output_guardrail",
+          "governor_gate"
+        ],
+        "aggregate": {
+          "decision": "go",
+          "confidence": 1.0,
+          "dissent_ratio": 0.0,
+          "vote_count": 3
+        },
         "provenance_confidence": 1.0,
-        "age_hours": 0.0
+        "age_hours": 0.001
+      }
+    },
+    {
+      "node_id": "3f72aa6d2bc0",
+      "node_type": "decision_checkpoint",
+      "topic": "default::phase1-btc-breakout-15m",
+      "content": "decision=go conf=1.000 dissent=0.000 reason=governor passed",
+      "created_at": "2026-03-13T11:34:15.410068+00:00",
+      "metadata": {
+        "project_id": "default",
+        "strategy_id": "phase1-btc-breakout-15m",
+        "passed_governor": true,
+        "stages": [
+          "project_scope_strategy",
+          "project_scope_secrets",
+          "input_guardrail",
+          "dag_recall",
+          "mcp_registry_guard",
+          "tool_guardrail",
+          "a2a_delegation_guard",
+          "debate_attempt_1",
+          "output_guardrail",
+          "governor_gate"
+        ],
+        "aggregate": {
+          "decision": "go",
+          "confidence": 1.0,
+          "dissent_ratio": 0.0,
+          "vote_count": 3
+        },
+        "provenance_confidence": 1.0,
+        "age_hours": 0.001
       }
     }
   ],
@@ -103,6 +167,14 @@
     {
       "from_node_id": "c9c134301631",
       "to_node_id": "9b42f7b58a98"
+    },
+    {
+      "from_node_id": "9b42f7b58a98",
+      "to_node_id": "dc88341c89b5"
+    },
+    {
+      "from_node_id": "dc88341c89b5",
+      "to_node_id": "3f72aa6d2bc0"
     }
   ]
 }

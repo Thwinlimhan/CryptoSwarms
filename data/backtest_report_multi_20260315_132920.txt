@@ -1,0 +1,16 @@
+Multi-Asset Backtest Report: Institutional VWAP Base
+Symbols: BTCUSDT, ETHUSDT, SOLUSDT
+Period: 14 days
+
+total_trades: 38
+wins: 17
+losses: 21
+win_rate: 44.7%
+total_pnl: $-1.12
+avg_win: $3.61
+avg_loss: $-2.98
+biggest_win: $7.41
+biggest_loss: $-6.76
+profit_factor: 0.98
+open_positions: 0
+portfolio_heat: $0.00

@@ -1,0 +1,16 @@
+Multi-Asset Backtest Report: Swarm Breakout Trend
+Symbols: BTCUSDT, ETHUSDT, SOLUSDT
+Period: 30 days
+
+total_trades: 87
+wins: 39
+losses: 48
+win_rate: 44.8%
+total_pnl: $87.18
+avg_win: $19.13
+avg_loss: $-13.72
+biggest_win: $67.01
+biggest_loss: $-26.79
+profit_factor: 1.13
+open_positions: 1
+portfolio_heat: $781.25

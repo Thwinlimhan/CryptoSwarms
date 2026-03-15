@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -9,6 +11,8 @@ import asyncpg
 from cryptoswarms.dashboard_insights import DashboardInsightInput
 from cryptoswarms.trade_attribution import extract_trade_trace
 from api.settings import settings
+
+logger = logging.getLogger(__name__)
 
 try:
     from redis.asyncio import from_url as redis_from_url
@@ -51,6 +55,29 @@ def _timescale_dsn() -> str:
 class DashboardRepository:
     def __init__(self, registered_agents: list[str]) -> None:
         self.registered_agents = registered_agents
+        self._dsn = _timescale_dsn()
+        self._pool: asyncpg.Pool | None = None
+
+    async def connect(self):
+        if not self._pool:
+            self._pool = await asyncpg.create_pool(self._dsn, min_size=2, max_size=10)
+
+    async def close(self):
+        if self._pool:
+            await self._pool.close()
+            self._pool = None
+
+    @asynccontextmanager
+    async def _get_conn(self):
+        if self._pool:
+            async with self._pool.acquire() as conn:
+                yield conn
+        else:
+            conn = await asyncpg.connect(self._dsn, timeout=2.0)
+            try:
+                yield conn
+            finally:
+                await conn.close()
 
     async def fetch_redis_heartbeats(self) -> dict[str, datetime | None]:
         data: dict[str, datetime | None] = {name: None for name in self.registered_agents}
@@ -61,14 +88,13 @@ class DashboardRepository:
                 data[name] = _parse_heartbeat(raw)
             await client.aclose()
         except Exception:
-            pass
+            logger.debug("fetch_redis_heartbeats failed", exc_info=True)
         return data
 
     async def fetch_signal_counts(self) -> dict[str, int]:
         counts = {name: 0 for name in self.registered_agents}
         try:
-            conn = await asyncpg.connect(_timescale_dsn(), timeout=2.0)
-            try:
+            async with self._get_conn() as conn:
                 rows = await conn.fetch(
                     """
                     SELECT agent_name, COUNT(*) AS c
@@ -81,17 +107,14 @@ class DashboardRepository:
                 )
                 for row in rows:
                     counts[str(row["agent_name"])] = int(row["c"])
-            finally:
-                await conn.close()
         except Exception:
-            pass
+            logger.debug("fetch_signal_counts failed", exc_info=True)
         return counts
 
     async def fetch_equity_curve(self, lookback_hours: int = 168) -> list[dict[str, Any]]:
         since = datetime.now(timezone.utc) - timedelta(hours=max(1, lookback_hours))
         try:
-            conn = await asyncpg.connect(_timescale_dsn(), timeout=2.0)
-            try:
+            async with self._get_conn() as conn:
                 rows = await conn.fetch(
                     """
                     SELECT time, SUM(COALESCE(realised_pnl, 0)) OVER (ORDER BY time) AS equity_usd
@@ -105,16 +128,13 @@ class DashboardRepository:
                 )
                 if rows:
                     return [{"time": r["time"].isoformat(), "equity_usd": float(r["equity_usd"] or 0.0)} for r in rows]
-            finally:
-                await conn.close()
         except Exception:
-            pass
+            logger.debug("fetch_equity_curve failed", exc_info=True)
         return []
 
     async def fetch_current_regime(self) -> dict[str, Any]:
         try:
-            conn = await asyncpg.connect(_timescale_dsn(), timeout=2.0)
-            try:
+            async with self._get_conn() as conn:
                 row = await conn.fetchrow(
                     """
                     SELECT regime, confidence
@@ -129,10 +149,8 @@ class DashboardRepository:
                         "confidence": float(row["confidence"] or 0.0),
                         "strategy_allocation": {"phase1-btc-breakout-15m": 1.0},
                     }
-            finally:
-                await conn.close()
         except Exception:
-            pass
+            logger.debug("fetch_current_regime failed", exc_info=True)
 
         return {
             "regime": "unknown",
@@ -142,8 +160,7 @@ class DashboardRepository:
 
     async def fetch_pending_validation(self) -> list[dict[str, Any]]:
         try:
-            conn = await asyncpg.connect(_timescale_dsn(), timeout=2.0)
-            try:
+            async with self._get_conn() as conn:
                 rows = await conn.fetch(
                     """
                     SELECT strategy_id, gate, passed, time
@@ -164,15 +181,13 @@ class DashboardRepository:
                         }
                     )
                 return out
-            finally:
-                await conn.close()
         except Exception:
+            logger.debug("fetch_pending_validation failed", exc_info=True)
             return []
 
     async def fetch_latest_risk_event(self) -> dict[str, Any] | None:
         try:
-            conn = await asyncpg.connect(_timescale_dsn(), timeout=2.0)
-            try:
+            async with self._get_conn() as conn:
                 row = await conn.fetchrow(
                     """
                     SELECT time, level, trigger, portfolio_heat, daily_dd
@@ -189,10 +204,8 @@ class DashboardRepository:
                         "portfolio_heat": float(row["portfolio_heat"] or 0.0),
                         "daily_dd": float(row["daily_dd"] or 0.0),
                     }
-            finally:
-                await conn.close()
         except Exception:
-            pass
+            logger.debug("fetch_latest_risk_event failed", exc_info=True)
         return None
 
     async def fetch_dashboard_insight_inputs(self, lookback_hours: int) -> DashboardInsightInput:
@@ -203,8 +216,7 @@ class DashboardRepository:
         attribution_rows: list[dict[str, object]] = []
 
         try:
-            conn = await asyncpg.connect(_timescale_dsn())
-            try:
+            async with self._get_conn() as conn:
                 trades = await conn.fetch(
                     """
                     SELECT realised_pnl, slippage_bps, id, strategy_id, metadata
@@ -241,10 +253,8 @@ class DashboardRepository:
                     since,
                 )
                 signal_rows = [dict(row) for row in signals]
-            finally:
-                await conn.close()
         except Exception:
-            pass
+            logger.debug("fetch_dashboard_insight_inputs failed", exc_info=True)
 
         regime = await self.fetch_current_regime()
         risk_event = await self.fetch_latest_risk_event()
@@ -261,8 +271,7 @@ class DashboardRepository:
         max_limit = max(1, min(int(limit), 2000))
         traces: list[dict[str, str | None]] = []
         try:
-            conn = await asyncpg.connect(_timescale_dsn(), timeout=2.0)
-            try:
+            async with self._get_conn() as conn:
                 if strategy_id:
                     rows = await conn.fetch(
                         """
@@ -287,8 +296,41 @@ class DashboardRepository:
                         max_limit,
                     )
                 traces = [extract_trade_trace(dict(row)) for row in rows]
-            finally:
-                await conn.close()
         except Exception:
-            pass
+            logger.debug("fetch_live_trade_traces failed", exc_info=True)
         return traces
+
+    async def fetch_decisions(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Fetch recently resolved decisions for the failure ledger."""
+        try:
+            async with self._get_conn() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT id, time, label, strategy_id, symbol, ev_estimate, win_probability, position_size_usd, status, pnl_usd, bias_flags, notes, resolved_at
+                    FROM decisions
+                    ORDER BY time DESC
+                    LIMIT $1
+                    """,
+                    limit
+                )
+                return [dict(row) for row in rows]
+        except Exception:
+            logger.debug("fetch_decisions failed", exc_info=True)
+            return []
+
+    async def ping_redis(self) -> bool:
+        try:
+            client = redis_from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+            await client.ping()
+            await client.aclose()
+            return True
+        except Exception:
+            return False
+
+    async def ping_timescaledb(self) -> bool:
+        try:
+            async with self._get_conn() as conn:
+                await conn.execute("SELECT 1")
+            return True
+        except Exception:
+            return False

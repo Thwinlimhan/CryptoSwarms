@@ -1,0 +1,6 @@
+Multi-Asset Backtest Report: Funding Arbitrage Sweep
+Symbols: BTCUSDT, ETHUSDT, SOLUSDT
+Period: 14 days
+
+trades: 0
+message: No closed trades yet

@@ -1,15 +1,17 @@
-"""Concrete MarketDataSource fetching FREE public data from Binance.
+"""Async Binance public-API market data — with rate limiting and response caching.
 
 No API keys required — all endpoints are public:
-  - GET /api/v3/ticker/24hr   → top symbols by volume
+  - GET /api/v3/ticker/24hr   → top symbols by volume (cached 30s)
   - GET /api/v3/klines         → OHLCV candles for breakout detection
-  - GET /fapi/v1/fundingRate   → perp funding rates
+  - GET /fapi/v1/premiumIndex  → perp funding rates
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import statistics
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -22,6 +24,14 @@ FUTURES_BASE = "https://fapi.binance.com"
 
 # Only trade USDT-margined pairs on Binance
 _QUOTE_ASSET = "USDT"
+
+# Rate limiter: max concurrent outbound requests
+_RATE_LIMITER = asyncio.Semaphore(10)
+
+# Simple TTL cache for the expensive all-ticker endpoint
+_TICKER_CACHE: dict[str, Any] = {}
+_TICKER_CACHE_TS: float = 0.0
+_TICKER_CACHE_TTL: float = 30.0  # seconds
 
 
 @dataclass
@@ -38,26 +48,58 @@ class BinanceMarketData:
     _kline_cache: dict[str, list[list[Any]]] = field(default_factory=dict, repr=False)
 
     # ── helpers ──────────────────────────────────────────────────
-    async def _get(self, url: str, params: dict | None = None) -> Any:
-        if self.session is None or self.session.is_closed:
-            self.session = httpx.AsyncClient(timeout=15.0)
-        try:
-            resp = await self.session.get(url, params=params)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as exc:
-            logger.warning("Binance request failed: %s %s → %s", url, params, exc)
-            return None
+    async def _get(self, url: str, params: dict | None = None, retries: int = 3) -> Any:
+        """GET with rate limiting, retry, and exponential back-off."""
+        async with _RATE_LIMITER:
+            if self.session is None or self.session.is_closed:
+                self.session = httpx.AsyncClient(timeout=15.0)
+            for attempt in range(retries):
+                try:
+                    resp = await self.session.get(url, params=params)
+                    resp.raise_for_status()
+                    return resp.json()
+                except Exception as exc:
+                    wait = 2 ** attempt  # 1s, 2s, 4s
+                    if attempt < retries - 1:
+                        logger.warning(
+                            "Binance request failed (attempt %d/%d): %s %s → %s (retry in %ds)",
+                            attempt + 1, retries, url, params, exc, wait,
+                        )
+                        await asyncio.sleep(wait)
+                    else:
+                        logger.warning(
+                            "Binance request failed after %d attempts: %s %s → %s",
+                            retries, url, params, exc,
+                        )
+                        return None
 
     async def close(self) -> None:
         if self.session and not self.session.is_closed:
             await self.session.aclose()
 
+    # ── cached ticker fetch ──────────────────────────────────────
+    async def _get_all_tickers(self) -> list[dict[str, Any]]:
+        """Return all 24h tickers — cached for _TICKER_CACHE_TTL seconds.
+
+        The Binance ticker endpoint returns ~2000 symbols and is expensive.
+        Caching avoids hammering it on every scan cycle.
+        """
+        global _TICKER_CACHE, _TICKER_CACHE_TS
+        now = time.monotonic()
+        if now - _TICKER_CACHE_TS < _TICKER_CACHE_TTL and _TICKER_CACHE:
+            return _TICKER_CACHE.get("data", [])
+        data = await self._get(f"{SPOT_BASE}/api/v3/ticker/24hr")
+        if isinstance(data, list):
+            _TICKER_CACHE = {"data": data}
+            _TICKER_CACHE_TS = now
+            return data
+        return _TICKER_CACHE.get("data", [])
+
     # ── fetch top symbols ────────────────────────────────────────
     async def fetch_top_symbols(self, limit: int = 30) -> list[str]:
         """Return top ``limit`` USDT-denominated symbols by 24h quote volume."""
-        data = await self._get(f"{SPOT_BASE}/api/v3/ticker/24hr")
-        if not isinstance(data, list):
+        data = await self._get_all_tickers()
+        if not data:
             return self._symbol_cache[:limit] if self._symbol_cache else []
 
         usdt_pairs = [
@@ -169,8 +211,8 @@ class BinanceMarketData:
 
     # ── price fetch for dashboard ────────────────────────────────
     async def fetch_prices(self, symbols: list[str]) -> list[dict[str, Any]]:
-        """Fetch current prices and 24h change for given symbols."""
-        data = await self._get(f"{SPOT_BASE}/api/v3/ticker/24hr")
+        """Fetch current prices and 24h change for given symbols (uses cached tickers)."""
+        data = await self._get_all_tickers()
         if not data:
             return []
 

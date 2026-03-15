@@ -1,15 +1,14 @@
 import { Code2, Settings } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-const API_URL = "http://127.0.0.1:8000";
+import { apiRequest } from '../api';
 
 export default function CodeViewer() {
   const [config, setConfig] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/routing/policy`)
-      .then(res => res.json())
+    apiRequest<{ tasks?: unknown }>('/api/routing/policy')
       .then(data => {
         setConfig(JSON.stringify(data.tasks || data, null, 2));
       })

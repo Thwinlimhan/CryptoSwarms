@@ -1,7 +1,7 @@
 import { Share2, Box, Clock, Hash } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
-const API_URL = "http://127.0.0.1:8000";
+import { apiRequest } from '../api';
 
 interface DagNode {
   node_id: string;
@@ -24,8 +24,7 @@ export default function MemoryDAG() {
 
   const fetchDAG = () => {
     setLoading(true);
-    fetch(`${API_URL}/api/decision/dag-preview?max_nodes=12`)
-      .then(res => res.json())
+    apiRequest<DagData>('/api/decision/dag-preview?max_nodes=12')
       .then(data => setData(data))
       .catch(console.error)
       .finally(() => setLoading(false));

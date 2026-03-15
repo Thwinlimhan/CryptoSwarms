@@ -1,0 +1,16 @@
+Multi-Asset Backtest Report: Golden Cross Trend
+Symbols: BTCUSDT, ETHUSDT, SOLUSDT
+Period: 14 days
+
+total_trades: 48
+wins: 24
+losses: 24
+win_rate: 50.0%
+total_pnl: $19.24
+avg_win: $17.77
+avg_loss: $-16.97
+biggest_win: $72.59
+biggest_loss: $-42.26
+profit_factor: 1.05
+open_positions: 2
+portfolio_heat: $2000.00

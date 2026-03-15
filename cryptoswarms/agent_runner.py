@@ -1,9 +1,10 @@
 """Background agent runner — the heart of CryptoSwarms.
 
-Launches async background tasks that run the real agents:
-  - MarketScanner: scans Binance for breakouts, funding extremes, whale activity
-  - RiskMonitor: evaluates portfolio risk and publishes heartbeats
-  - RegimeClassifier: classifies market regime from BTC data
+Launches async background tasks that delegate to specialized agents:
+  - ScannerAgent: scans Binance for breakouts, funding extremes, whale activity
+  - RiskAgent: evaluates portfolio risk and publishes heartbeats
+  - RegimeAgent: classifies market regime from BTC data
+  - FundingAgent: fetches perpetual funding rates
 
 All data is written to TimescaleDB (signals, regimes, risk_events)
 and Redis (heartbeats) so the dashboard shows real, live data.
@@ -14,23 +15,32 @@ from __future__ import annotations
 import asyncio
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
+from api.settings import settings
 from cryptoswarms.adapters.binance_market_data import BinanceMarketData
 from cryptoswarms.adapters.timescale_sink import TimescaleSink
 from cryptoswarms.adapters.redis_heartbeat import RedisHeartbeat
+from cryptoswarms.adapters.hyperliquid_adapter import HyperliquidAdapter
+
+from cryptoswarms.scanner_agent import ScannerAgent, ScannerConfig
+from cryptoswarms.risk_agent import RiskAgent
+from cryptoswarms.regime_agent import RegimeAgent
+from cryptoswarms.funding_agent import FundingAgent
+from cryptoswarms.research_agent import ResearchAgent
+from cryptoswarms.memory_dag import MemoryDag
+from cryptoswarms.adapters.llm import LLMClient
+from cryptoswarms.pipeline.strategy_loader import StrategyLoader
+from cryptoswarms.execution_router import ExecutionRouter, OrderIntent
+from cryptoswarms.position_manager import PositionManager, ExitReason
+from cryptoswarms.kelly_sizer import kelly_size
 
 logger = logging.getLogger("agent_runner")
 
 
 class AgentRunner:
-    """Manages background agent loops."""
-
-    SCANNER_INTERVAL = 60       # seconds between market scans
-    RISK_INTERVAL = 30          # seconds between risk evaluations
-    REGIME_INTERVAL = 300       # seconds between regime classifications
-    FUNDING_INTERVAL = 600      # seconds between funding rate fetches
+    """Manages background agent loops — delegates to specialized agents."""
 
     def __init__(
         self,
@@ -41,37 +51,79 @@ class AgentRunner:
         self._market_data = BinanceMarketData()
         self._db = TimescaleSink(timescale_dsn)
         self._heartbeat = RedisHeartbeat(redis_url)
+        self._execution = HyperliquidAdapter()
+        
+        # Initialize specialized agents with settings-driven config
+        scanner_config = ScannerConfig(
+            breakout_confidence=settings.scanner_breakout_confidence,
+            funding_confidence=settings.scanner_funding_confidence,
+            smart_money_confidence=settings.scanner_smart_money_confidence,
+            cooldown_cycles=settings.scanner_cooldown_cycles
+        )
+        
+        self.scanner = ScannerAgent(
+            market_data=self._market_data,
+            db=self._db,
+            heartbeat=self._heartbeat,
+            config=scanner_config
+        )
+        self.risk = RiskAgent(db=self._db, heartbeat=self._heartbeat)
+        self.regime = RegimeAgent(
+            market_data=self._market_data,
+            db=self._db,
+            heartbeat=self._heartbeat
+        )
+        self.funding = FundingAgent(market_data=self._market_data)
+        
+        # New: Research Memory & LLM
+        self.dag = MemoryDag()
+        self.llm = LLMClient()
+        self.researcher = ResearchAgent(
+            db=self._db, 
+            heartbeat=self._heartbeat,
+            dag=self.dag,
+            llm=self.llm
+        )
+
+        # Portfolio Management
+        self.pm = PositionManager()
+        self.base_bankroll = 10000.0 # Virtual bankroll for paper trading
+
+        # Load strategies
+        self.strategy_loader = StrategyLoader()
+        self.strategies = self.strategy_loader.load_all()
+
         self._tasks: list[asyncio.Task] = []
         self._running = False
-        self._scan_count = 0
-        self._last_signals: list[dict[str, Any]] = []
-        self._last_regime: str = "unknown"
-        self._last_funding: dict[str, float] = {}
-        self._last_prices: list[dict[str, Any]] = []
 
     @property
     def is_running(self) -> bool:
         return self._running
 
+    # Delegate properties for API compatibility
     @property
     def scan_count(self) -> int:
-        return self._scan_count
+        return self.scanner.scan_count
 
     @property
     def last_signals(self) -> list[dict[str, Any]]:
-        return self._last_signals
+        return self.scanner.last_signals
+
+    @property
+    def signal_history(self) -> list[dict[str, Any]]:
+        return list(self.scanner.signal_history)
 
     @property
     def last_regime(self) -> str:
-        return self._last_regime
+        return self.regime.last_regime
 
     @property
     def last_funding(self) -> dict[str, float]:
-        return self._last_funding
+        return self.funding.last_funding
 
     @property
     def last_prices(self) -> list[dict[str, Any]]:
-        return self._last_prices
+        return self.scanner.last_prices
 
     async def start(self) -> None:
         """Connect dependencies and spawn background loops."""
@@ -89,6 +141,7 @@ class AgentRunner:
             asyncio.create_task(self._risk_loop(), name="risk"),
             asyncio.create_task(self._regime_loop(), name="regime"),
             asyncio.create_task(self._funding_loop(), name="funding"),
+            asyncio.create_task(self._research_loop(), name="researcher"),
         ]
         logger.info("AgentRunner started — %d background tasks", len(self._tasks))
 
@@ -104,178 +157,190 @@ class AgentRunner:
         await self._market_data.close()
         await self._db.close()
         await self._heartbeat.close()
+        await self._execution.close()
+        self.researcher.heartbeat(status="stopped")
         logger.info("AgentRunner stopped")
 
-    # ── Scanner Loop ─────────────────────────────────────────────
     async def _scanner_loop(self) -> None:
-        """Continuously scan markets for trading signals."""
-        logger.info("Scanner loop started (interval=%ds)", self.SCANNER_INTERVAL)
+        """Continuously scan markets via ScannerAgent."""
+        logger.info("Scanner loop started (interval=%ds)", self.scanner.config.interval_seconds)
         while self._running:
             try:
-                await self._run_scan_cycle()
+                signals = await self.scanner.run_cycle()
+                
+                # Broadcast signals to connected WebSocket clients
+                try:
+                    from api.routes.websocket import manager
+                    await manager.broadcast({
+                        "type": "signals",
+                        "data": signals,
+                        "scan_count": self.scanner.scan_count,
+                        "hot_assets": self.scanner.last_prices
+                    })
+                except Exception as e:
+                    logger.error(f"Failed to broadcast WS message: {e}")
+
+                # ── EXIT EVALUATION ──────────────────────────────
+                # Check for stop-losses, take-profits, etc.
+                if self.scanner.last_prices:
+                    # Convert list of dicts [{"symbol": "BTC...", "price": 123...}] to dict {symbol: price}
+                    price_map = {p["symbol"]: p["price"] for p in self.scanner.last_prices}
+                    closed_trades = self.pm.check_exits(price_map)
+                    for trade in closed_trades:
+                        logger.info(f"TRADE CLOSED: {trade.symbol} | PnL: ${trade.pnl_usd} | Reason: {trade.exit_reason}")
+                        # Broadcast exit
+                        from api.routes.websocket import manager
+                        await manager.broadcast({
+                            "type": "trade_closed",
+                            "data": trade.__dict__
+                        })
+                        
+                        # Update DB with realized PnL
+                        await self._db.resolve_decision(
+                            decision_id=trade.position_id,
+                            status="won" if trade.pnl_usd > 0 else "lost",
+                            pnl=trade.pnl_usd,
+                            notes=f"Exit reason: {trade.exit_reason}"
+                        )
+
+                # ── STRATEGY EVALUATION ──────────────────────────
+                # Process signals through loaded strategies
+                price_map = {p["symbol"]: p["price"] for p in self.scanner.last_prices} if self.scanner.last_prices else {}
+                
+                for signal in signals:
+                    context = {
+                        "current_regime": self.regime.last_regime,
+                        "smart_money": any(s["signal_type"] == "SMART_MONEY" for s in signals if s["symbol"] == signal["symbol"]),
+                        "funding": self.funding.last_funding.get(signal["symbol"], 0.0)
+                    }
+                    
+                    for strat_id, strategy in self.strategies.items():
+                        try:
+                            decision = await strategy.evaluate(signal, context)
+                            if decision:
+                                logger.info(f"Strategic Decision from {strat_id}: {decision}")
+                                
+                                # Broadcast strategic decision
+                                from api.routes.websocket import manager
+                                await manager.broadcast({
+                                    "type": "strategic_decision",
+                                    "data": decision
+                                })
+
+                                # Log to DB
+                                await self._db.write_signal(
+                                    agent_name=f"strat:{strat_id}",
+                                    signal_type=f"DECISION_{decision['action']}",
+                                    symbol=decision["symbol"],
+                                    confidence=decision["confidence"],
+                                    metadata=decision
+                                )
+
+                                # ── POSITION SIZING (KELLY) ──
+                                ks = kelly_size(
+                                    win_rate=0.5, # Default starting point
+                                    avg_win_pct=0.04,
+                                    avg_loss_pct=0.02,
+                                    bankroll_usd=self.base_bankroll
+                                )
+                                size_usd = ks.suggested_size_usd
+                                
+                                # ── EXECUTION ────────────────────────────────
+                                if decision.get("action") in ["BUY", "SELL", "LONG", "SHORT"] and size_usd > 0:
+                                    # Open position in manager
+                                    symbol = decision["symbol"]
+                                    price = price_map.get(symbol)
+                                    if not price:
+                                        logger.warning(f"No price for {symbol}, fetching now...")
+                                        price = (await self._market_data.fetch_ticker(symbol))["price"]
+
+                                    pos = self.pm.open_position(
+                                        strategy_id=strat_id,
+                                        symbol=symbol,
+                                        side=decision["action"],
+                                        entry_price=price,
+                                        size_usd=size_usd,
+                                        stop_loss_pct=strategy.config.stop_loss_pct,
+                                        take_profit_pct=strategy.config.parameters.get("take_profit_pct", 0.04),
+                                        trailing_stop_pct=strategy.config.parameters.get("trailing_stop_pct", 0.0)
+                                    )
+                                    # Persist to decisions table so failure ledger can resolve on close
+                                    await self._db.write_decision({
+                                        "id": pos.position_id,
+                                        "label": decision.get("action", "open"),
+                                        "strategy_id": strat_id,
+                                        "symbol": symbol,
+                                        "ev_estimate": float(decision.get("ev") or decision.get("expected_value") or 0.0),
+                                        "win_probability": float(decision.get("confidence", 0.5)),
+                                        "position_size_usd": size_usd,
+                                        "bias_flags": [],
+                                        "status": "pending",
+                                    })
+
+                                    logger.info(f"Executing {decision['action']} for {symbol} with size ${size_usd}")
+                                    intent = OrderIntent(
+                                        symbol=symbol,
+                                        side=decision["action"],
+                                        quantity=pos.size_tokens
+                                    )
+                                    # Send to Hyperliquid
+                                    await self._execution.execute(intent)
+                                else:
+                                    logger.warning(f"Skipping execution for {decision['symbol']}: zero size or invalid action")
+                        except Exception as e:
+                            logger.error(f"Strategy {strat_id} evaluation error: {e}")
+                    
             except asyncio.CancelledError:
                 break
             except Exception:
+                import traceback
                 logger.error("Scanner cycle error:\n%s", traceback.format_exc())
-            await asyncio.sleep(self.SCANNER_INTERVAL)
+            await asyncio.sleep(self.scanner.config.interval_seconds)
 
-    async def _run_scan_cycle(self) -> None:
-        now = datetime.now(timezone.utc)
-        self._scan_count += 1
-        logger.info("=== Scanner cycle #%d ===", self._scan_count)
-
-        # Set heartbeat
-        await self._heartbeat.set_heartbeat("market_scanner")
-
-        # Fetch top symbols
-        symbols = await self._market_data.fetch_top_symbols(limit=20)
-        if not symbols:
-            logger.warning("No symbols fetched, skipping cycle")
-            return
-
-        # Fetch prices for hot assets display
-        hot_symbols = symbols[:5]
-        self._last_prices = await self._market_data.fetch_prices(hot_symbols)
-
-        signals: list[dict[str, Any]] = []
-        scanned = 0
-
-        for symbol in symbols[:15]:  # scan top 15
-            scanned += 1
-
-            # Breakout detection
-            is_breakout = await self._market_data.breakout_detected(symbol)
-            if is_breakout:
-                sig = {
-                    "signal_type": "BREAKOUT",
-                    "symbol": symbol,
-                    "confidence": 0.78,
-                    "priority": "HIGH",
-                    "source": "binance_scanner",
-                }
-                signals.append(sig)
-                await self._db.write_signal(
-                    agent_name="market_scanner",
-                    signal_type="BREAKOUT",
-                    symbol=symbol,
-                    confidence=0.78,
-                    metadata={"source": "binance_bollinger_breakout"},
-                )
-
-            # Funding extreme
-            funding_signal = await self._market_data.funding_extreme(symbol)
-            if funding_signal:
-                sig = {
-                    "signal_type": funding_signal,
-                    "symbol": symbol,
-                    "confidence": 0.72,
-                    "priority": "MEDIUM",
-                    "source": "binance_funding",
-                }
-                signals.append(sig)
-                await self._db.write_signal(
-                    agent_name="market_scanner",
-                    signal_type=funding_signal,
-                    symbol=symbol,
-                    confidence=0.72,
-                    metadata={"source": "binance_funding_rate"},
-                )
-
-            # Smart money detection (only for top 5 by volume)
-            if scanned <= 5:
-                inflow = await self._market_data.smart_money_inflow(symbol)
-                if inflow >= 500_000:  # lower threshold for visibility
-                    sig = {
-                        "signal_type": "SMART_MONEY",
-                        "symbol": symbol,
-                        "confidence": 0.70,
-                        "priority": "HIGH",
-                        "source": "binance_trades",
-                        "inflow_usd": inflow,
-                    }
-                    signals.append(sig)
-                    await self._db.write_signal(
-                        agent_name="market_scanner",
-                        signal_type="SMART_MONEY",
-                        symbol=symbol,
-                        confidence=0.70,
-                        metadata={"source": "binance_large_trades", "inflow_usd": inflow},
-                    )
-
-            if len(signals) >= 10:
-                break
-
-        self._last_signals = signals
-        logger.info("Scanner cycle #%d complete: %d symbols scanned, %d signals found",
-                     self._scan_count, scanned, len(signals))
-
-    # ── Risk Monitor Loop ────────────────────────────────────────
     async def _risk_loop(self) -> None:
-        """Continuously publish risk monitor heartbeats."""
-        logger.info("Risk monitor loop started (interval=%ds)", self.RISK_INTERVAL)
+        """Evaluate risk via RiskAgent."""
+        logger.info("Risk monitor loop started (interval=%ds)", self.risk.INTERVAL)
         while self._running:
             try:
-                await self._heartbeat.set_heartbeat("risk_monitor")
-
-                # Write periodic risk status (healthy)
-                await self._db.write_risk_event(
-                    level=0,
-                    trigger="periodic_check",
-                    portfolio_heat=0.0,
-                    daily_dd=0.0,
-                )
+                await self.risk.run_cycle()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.error("Risk loop error:\n%s", traceback.format_exc())
-            await asyncio.sleep(self.RISK_INTERVAL)
+            await asyncio.sleep(self.risk.INTERVAL)
 
-    # ── Regime Classification Loop ───────────────────────────────
     async def _regime_loop(self) -> None:
-        """Classify and write market regime periodically."""
-        logger.info("Regime classifier started (interval=%ds)", self.REGIME_INTERVAL)
+        """Classify regime via RegimeAgent."""
+        logger.info("Regime classifier started (interval=%ds)", self.regime.INTERVAL)
         while self._running:
             try:
-                await self._heartbeat.set_heartbeat("validation_pipeline")
-
-                regime = await self._market_data.classify_regime()
-                self._last_regime = regime
-
-                # Map regime to confidence
-                confidence_map = {
-                    "volatility_expansion": 0.82,
-                    "volatility_crash": 0.90,
-                    "trending_up": 0.75,
-                    "trending_down": 0.75,
-                    "range_bound": 0.68,
-                    "unknown": 0.30,
-                }
-                confidence = confidence_map.get(regime, 0.5)
-
-                await self._db.write_regime(
-                    regime=regime,
-                    confidence=confidence,
-                    indicators={"source": "btc_1h_vola_trend"},
-                )
-                logger.info("Regime classified: %s (confidence=%.2f)", regime, confidence)
-
+                await self.regime.run_cycle()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.error("Regime loop error:\n%s", traceback.format_exc())
-            await asyncio.sleep(self.REGIME_INTERVAL)
+            await asyncio.sleep(self.regime.INTERVAL)
 
-    # ── Funding Rate Fetch Loop ──────────────────────────────────
     async def _funding_loop(self) -> None:
-        """Fetch and cache perp funding rates."""
-        logger.info("Funding rate fetcher started (interval=%ds)", self.FUNDING_INTERVAL)
+        """Fetch funding via FundingAgent."""
+        logger.info("Funding rate fetcher started (interval=%ds)", self.funding.INTERVAL)
         while self._running:
             try:
-                rates = await self._market_data.fetch_funding_rates()
-                self._last_funding = rates
-                logger.info("Fetched %d funding rates", len(rates))
+                await self.funding.run_cycle()
             except asyncio.CancelledError:
                 break
             except Exception:
                 logger.error("Funding loop error:\n%s", traceback.format_exc())
-            await asyncio.sleep(self.FUNDING_INTERVAL)
+            await asyncio.sleep(self.funding.INTERVAL)
+
+    async def _research_loop(self) -> None:
+        """Autoresearch loop following Karpathy pattern."""
+        logger.info("Research loop started (interval=300s)")
+        while self._running:
+            try:
+                await self.researcher.run_cycle()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.error("Research loop error:\n%s", traceback.format_exc())
+            await asyncio.sleep(300) # Check for window every 5 mins

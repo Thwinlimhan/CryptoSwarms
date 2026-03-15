@@ -5,21 +5,23 @@ Phase-oriented implementation scaffold for `Crypto swarm v6`.
 ## Current status
 
 - Phase 0: infrastructure scaffold in place (compose, env template, CI, task runner).
-- Phase 1: vertical slice includes scanner loop, runtime adapters, and paper promotion report job.
-- Phase 2+: core checklist tracked in `docs/MASTER_IMPLEMENTATION_CHECKLIST_V6.md`.
+- Phase 1-9: infrastructure hardened, API decomposed, security gates added, TimescaleDB pooling implemented.
+- Phase 11-13: EV Master Hub and Crypto Layer modules fully implemented in the React frontend.
+- core checklist tracked in `docs/implementation checklist.md`.
 
 ## Project layout
 
+- `frontend/`: React + Vite + TypeScript operator dashboard with **Amber/Orange High-Contrast Terminal UI**.
 - `cryptoswarms/`: core orchestration domain modules.
 - `agents/`: swarm agents grouped by domain (`research`, `backtest`, `execution`, `evolution`, `orchestration`).
-- `api/`: FastAPI service and health/bridge endpoints.
+- `api/`: FastAPI service with modular routing in `api/routes/`.
 - `infra/`: infrastructure and schema assets.
-- `data/schemas/`: TimescaleDB bootstrap SQL.
+- `data/schemas/`: TimescaleDB bootstrap SQL and retention policies.
 - `memory/`: Mem0 + Graphiti integration and memory-quality utilities.
 - `strategies/`: strategy hypotheses and candidate definitions.
 - `scripts/`: operational scripts for phased runs.
-- `docs/`: phase plans and operational notes.
-- `tests/`: unit + integration tests.
+- `docs/`: architecture (Mermaid), setup guides, and phase plans.
+- `tests/`: unit + integration tests for both API and Frontend.
 - `mission-control-upstream/`: cloned upstream Mission Control dashboard.
 
 ## Local setup (Windows)
@@ -32,22 +34,17 @@ C:\Users\thwin\AppData\Local\Programs\Python\Python313\python.exe -m venv .venv
 ## Common commands
 
 ```powershell
+# Backend env
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe scripts\run_phase1_smoke.py
-.\.venv\Scripts\python.exe scripts\run_phase1_loop.py
-.\.venv\Scripts\python.exe scripts\run_paper_ledger_job.py
-.\.venv\Scripts\python.exe scripts\run_research_camoufox.py
-.\.venv\Scripts\python.exe scripts\run_research_factory.py
-.\.venv\Scripts\python.exe scripts\run_skill_factory.py
-.\.venv\Scripts\python.exe scripts\run_skill_factory_readtheskill.py
-.\.venv\Scripts\python.exe scripts\run_skill_factory_bnbchain.py
-.\.venv\Scripts\python.exe scripts\run_skill_factory_cryptoskills.py
-.\.venv\Scripts\python.exe scripts\run_crypto_strategy_pack.py
-.\.venv\Scripts\python.exe scripts\run_evolution_autoresearch.py
-.\.venv\Scripts\python.exe scripts\check_backtest_runtimes.py
-.\.venv\Scripts\python.exe scripts\run_deepflow_preflight.py
-pwsh -File scripts/run_swarm_api_build.ps1
-docker compose up -d mission-control swarm-api redis timescaledb
+.\.venv\Scripts\python.exe -m api.main
+
+# Frontend env
+cd frontend
+npm install
+npm run dev
+
+# Infrastructure
+docker compose up -d redis timescaledb mission-control
 ```
 
 ## Build troubleshooting
@@ -71,7 +68,9 @@ docker compose up -d mission-control swarm-api redis timescaledb
 
 ## Operator dashboard
 
-- Interactive deck: `https://localhost:8000/dashboard`
+- React Operator Dashboard: `http://localhost:5173` (Standalone Dev) or `http://localhost:3000` (Dockerized)
+- EV Master Hub: `http://localhost:5173/ev`
+- Swagger API Docs: `http://localhost:8000/docs`
 - Insight API: `GET /api/dashboard/insights?lookback_hours=24`
 - Overview API: `GET /api/dashboard/overview`
 - Debate preview API: `GET /api/decision/debate-preview`
@@ -109,6 +108,7 @@ Run `pwsh -File scripts\new_localhost_tls_cert.ps1`, then set both `SSL_CERTFILE
 - Agentic background R&D workflow: `docs/AGENTIC_RESEARCH_FACTORY.md`
 - Decision framework modules: `docs/DECISION_FRAMEWORK.md`
 - Decision Council orchestration: `docs/DECISION_COUNCIL_ORCHESTRATION.md`
+- System Architecture: `docs/ARCHITECTURE.md`
 
 ## Verification
 

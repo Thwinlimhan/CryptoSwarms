@@ -1,0 +1,39 @@
+{
+  "nodes": [
+    {
+      "node_id": "9df5a1463746",
+      "node_type": "strategy_refinement",
+      "topic": "funding_arbitrage",
+      "content": "LLM Refinement Proposal for breakout_trend.py: Funding rate mean has shifted from +0.01% to +0.005% over the past 14 days.  Lowering the min_funding_rate entry threshold will let the strategy capture 22% more opportunities without increasing drawdown.",
+      "created_at": "2026-03-14T17:15:06.783011+00:00",
+      "metadata": {
+        "proposed_parameters": {
+          "min_funding_rate": 0.0004,
+          "max_position_usd": 12000,
+          "hedge_ratio": 0.98
+        },
+        "confidence": 0.88,
+        "source_file": "breakout_trend.py",
+        "timestamp": "2026-03-14T17:15:06.783011+00:00"
+      }
+    },
+    {
+      "node_id": "ff0dbec24bae",
+      "node_type": "strategy_refinement",
+      "topic": "funding_arbitrage",
+      "content": "LLM Refinement Proposal for funding_arbitrage.py: Funding rate mean has shifted from +0.01% to +0.005% over the past 14 days.  Lowering the min_funding_rate entry threshold will let the strategy capture 22% more opportunities without increasing drawdown.",
+      "created_at": "2026-03-14T17:15:06.783011+00:00",
+      "metadata": {
+        "proposed_parameters": {
+          "min_funding_rate": 0.0004,
+          "max_position_usd": 12000,
+          "hedge_ratio": 0.98
+        },
+        "confidence": 0.88,
+        "source_file": "funding_arbitrage.py",
+        "timestamp": "2026-03-14T17:15:06.783011+00:00"
+      }
+    }
+  ],
+  "edges": []
+}
