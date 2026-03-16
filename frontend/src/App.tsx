@@ -16,7 +16,8 @@ import {
   Calculator,
   AlertTriangle,
   BarChart3,
-  Beaker
+  Beaker,
+  Wallet
 } from 'lucide-react';
 import './App.css';
 
@@ -39,6 +40,7 @@ import { MasterDashboard } from './views/ev/MasterDashboard';
 import FailureLedger from './views/FailureLedger';
 import PaperTrading from './views/PaperTrading';
 import ResearchLab from './views/ResearchLab';
+import Portfolio from './views/Portfolio';
 
 function Sidebar() {
   const location = useLocation();
@@ -118,6 +120,10 @@ function Sidebar() {
           <BarChart3 size={18} />
           <span>PAPER_TRADING</span>
         </Link>
+        <Link to="/portfolio" className={`nav-item ${path === '/portfolio' ? 'active' : ''}`}>
+          <Wallet size={18} />
+          <span>PORTFOLIO_PNL</span>
+        </Link>
       </nav>
 
       <div className="sidebar-footer">
@@ -175,6 +181,7 @@ function App() {
                 <Route path="/failure-ledger" element={<FailureLedger />} />
                 <Route path="/research-lab" element={<ResearchLab />} />
                 <Route path="/paper" element={<PaperTrading />} />
+                <Route path="/portfolio" element={<Portfolio />} />
               </Routes>
             </ErrorBoundary>
           </div>

@@ -75,7 +75,9 @@ class OrderPersistence:
     @staticmethod
     def _generate_client_order_id() -> str:
         """Generate a unique client order ID."""
-        return f"cs_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+        ts = str(int(time.time()))
+        unique = uuid.uuid4().hex[:8]
+        return f"cs_{ts}_{unique}"
 
     async def persist_order_intent(self, order: OrderRequest) -> str:
         """Record the order intent before submitting it to the exchange.
@@ -128,6 +130,42 @@ class OrderPersistence:
             order.quantity, order.price or "MARKET",
         )
         return client_order_id
+
+    async def persist_from_position(
+        self,
+        position: Any,
+        strategy_id: str = "",
+    ) -> str:
+        """Convenience: persist intent from a PositionManager Position object.
+
+        Converts the Position dataclass into an OrderRequest before persisting.
+
+        Args:
+            position: A Position from the PositionManager.
+            strategy_id: Strategy ID override (falls back to position.strategy_id).
+
+        Returns:
+            The generated client_order_id.
+        """
+        raw_side = getattr(position, "side", "BUY")
+        # PositionSide enum → string
+        side_str: str = raw_side.value if hasattr(raw_side, "value") else str(raw_side)
+
+        order = OrderRequest(
+            symbol=position.symbol,
+            side=side_str,
+            order_type="MARKET",
+            quantity=float(getattr(position, "size_tokens", 0.0)),
+            price=float(getattr(position, "entry_price", 0.0)) or None,
+            strategy_id=strategy_id or getattr(position, "strategy_id", ""),
+            metadata={
+                "position_id": getattr(position, "position_id", ""),
+                "size_usd": getattr(position, "size_usd", 0.0),
+                "stop_loss": getattr(position, "stop_loss_price", None),
+                "take_profit": getattr(position, "take_profit_price", None),
+            },
+        )
+        return await self.persist_order_intent(order)
 
     async def update_status(
         self,
@@ -183,3 +221,24 @@ class OrderPersistence:
                 if o.status == OrderStatus.PENDING_SUBMISSION
                 and (now - o.created_at).total_seconds() > age_seconds
             ]
+
+    async def get_all_orders(self) -> list[PersistedOrder]:
+        """Return all persisted orders (for dashboard/API)."""
+        async with self._lock:
+            return list(self._orders.values())
+
+    def get_order_stats(self) -> dict[str, Any]:
+        """Return summary statistics for all persisted orders."""
+        total = len(self._orders)
+        by_status: dict[str, int] = {}
+        for o in self._orders.values():
+            status_key = o.status.value
+            by_status[status_key] = by_status.get(status_key, 0) + 1
+
+        return {
+            "total_orders": total,
+            "by_status": by_status,
+            "pending_count": by_status.get("pending_submission", 0) + by_status.get("submitted", 0),
+            "filled_count": by_status.get("filled", 0),
+            "failed_count": by_status.get("failed", 0) + by_status.get("rejected", 0),
+        }

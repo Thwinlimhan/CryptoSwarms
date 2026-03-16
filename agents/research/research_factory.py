@@ -9,7 +9,7 @@ from typing import Iterable, Protocol
 from agents.research.deerflow_pipeline import NewsSourceConnector, ResearchItem, score_sentiment
 from agents.research.progressive_loader import ProgressiveSkillLoader
 from agents.research.security_controls import input_guardrail
-from cryptoswarms.base_rate_registry import BaseRateRegistry, default_base_rate_registry
+from cryptoswarms.base_rate_registry import LegacyBaseRateRegistry as BaseRateRegistry, default_base_rate_registry
 from cryptoswarms.bayesian_update import sentiment_likelihoods, sequential_bayes_update
 from cryptoswarms.dag_recall import DagWalker
 from cryptoswarms.decision_engine import OutcomeScenario, expected_value

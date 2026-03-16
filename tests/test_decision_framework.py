@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from cryptoswarms.base_rate_registry import BaseRateProfile, BaseRateRegistry, default_base_rate_registry
+from cryptoswarms.base_rate_registry import LegacyBaseRateProfile as BaseRateProfile, LegacyBaseRateRegistry as BaseRateRegistry, default_base_rate_registry
 from cryptoswarms.bayesian_update import bayes_update, sentiment_likelihoods, sequential_bayes_update
 from cryptoswarms.decision_engine import BinaryDecisionInput, OutcomeScenario, evaluate_binary_decision, expected_value
 from cryptoswarms.failure_ledger import FailureLedger

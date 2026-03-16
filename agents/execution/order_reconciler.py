@@ -1,15 +1,18 @@
 """Order Reconciler — reconciles local order state with exchange state.
 
 Periodically checks pending/submitted orders against the exchange
-to ensure consistent position tracking.
+to ensure consistent position tracking. Works with OrderPersistence.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+
+from agents.execution.order_persistence import OrderStatus
 
 logger = logging.getLogger("swarm.execution.reconciler")
 
@@ -29,16 +32,17 @@ class OrderReconciler:
     """Reconciles local order records with exchange order status.
 
     Runs periodically to detect and fix inconsistencies between
-    the local order database and the exchange's actual order state.
+    the local order database (OrderPersistence) and the exchange's
+    actual order state.
     """
 
     def __init__(
         self,
-        db: Any | None = None,
+        persistence: Any | None = None,
         exchange: Any | None = None,
         interval_seconds: float = 60.0,
     ) -> None:
-        self._db = db
+        self._persistence = persistence
         self._exchange = exchange
         self._interval = interval_seconds
         self._running = False
@@ -54,36 +58,69 @@ class OrderReconciler:
         result = ReconciliationResult(timestamp=datetime.now(timezone.utc))
 
         try:
-            # Get pending orders from DB
-            if self._db is not None:
-                pending_orders = await self._db.get_pending_orders()
+            # Get pending orders from persistence
+            if self._persistence is not None:
+                pending_orders = await self._persistence.get_pending_orders()
             else:
-                logger.debug("No DB configured, skipping reconciliation")
+                logger.debug("No persistence configured, skipping reconciliation")
                 return result
 
             result.orders_checked = len(pending_orders)
 
             for order in pending_orders:
                 try:
-                    order_id = getattr(order, "exchange_order_id", None) or getattr(order, "id", None)
-                    if order_id is None:
+                    # We need the exchange_order_id if it exists, otherwise we might 
+                    # use client_order_id depending on what the exchange supports.
+                    # For now, we prefer exchange_order_id if it's already SUBMITTED.
+                    
+                    # HL adapter might not have get_order_status implemented yet, 
+                    # so we should be careful.
+                    if not hasattr(self._exchange, "get_order_status"):
                         continue
 
-                    if self._exchange is not None:
-                        exchange_status = await self._exchange.get_order_status(order_id)
-                    else:
+                    # If it's only PENDING_SUBMISSION, it hasn't hit the exchange yet.
+                    # We only reconcile orders that are SUBMITTED or PARTIALLY_FILLED.
+                    if order.status == OrderStatus.PENDING_SUBMISSION:
                         continue
 
-                    local_status = getattr(order, "status", None)
-                    if exchange_status != local_status:
-                        await self._db.update_order_status(order_id, exchange_status)
+                    order_id = order.exchange_order_id or order.client_order_id
+                    
+                    exchange_data = await self._exchange.get_order_status(order_id)
+                    if not exchange_data:
+                        continue
+
+                    exchange_status_raw = exchange_data.get("status", "").lower()
+                    
+                    # Map exchange status to our OrderStatus enum
+                    new_status = None
+                    if exchange_status_raw in ("filled", "closed"):
+                        new_status = OrderStatus.FILLED
+                    elif exchange_status_raw in ("canceled", "cancelled"):
+                        new_status = OrderStatus.CANCELLED
+                    elif exchange_status_raw in ("rejected", "failed"):
+                        new_status = OrderStatus.FAILED
+                    elif exchange_status_raw == "open":
+                        new_status = OrderStatus.SUBMITTED
+                    
+                    if new_status and new_status != order.status:
+                        await self._persistence.update_status(
+                            order.client_order_id, 
+                            new_status,
+                            filled_quantity=exchange_data.get("filled_qty"),
+                            filled_price=exchange_data.get("avg_price")
+                        )
                         result.status_updated += 1
                         logger.info(
-                            "Order %s status updated: %s → %s",
-                            order_id, local_status, exchange_status,
+                            "Order %s (%s) reconciled: %s → %s",
+                            order.client_order_id, order.symbol,
+                            order.status.value, new_status.value,
                         )
+                        
+                        # If filled, we might also need to notify the PositionManager 
+                        # if it's not already aware. But usually the fill event 
+                        # happens via the execution flow or WS. Reconciler is fallback.
                 except Exception as exc:
-                    error_msg = f"Failed to reconcile order: {exc}"
+                    error_msg = f"Failed to reconcile order {order.client_order_id}: {exc}"
                     result.errors.append(error_msg)
                     logger.warning(error_msg)
 
@@ -93,7 +130,6 @@ class OrderReconciler:
             logger.error(error_msg)
 
         self._reconciliation_history.append(result)
-        # Keep last 1000 results
         if len(self._reconciliation_history) > 1000:
             self._reconciliation_history = self._reconciliation_history[-1000:]
 

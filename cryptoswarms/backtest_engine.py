@@ -1,7 +1,12 @@
-"""Backtest Engine for CryptoSwarms.
+"""DEPRECATED: Legacy Backtest Engine for CryptoSwarms.
 
-Replays historical candle data through strategies and evaluates performance
-using the PositionManager and KellySizer.
+This is the old fake backtesting system. Use RealBacktestEngine instead.
+For real alpha discovery, use AlphaDiscoveryEngine.
+
+MIGRATION PATH:
+- Replace BacktestEngine with RealBacktestEngine
+- Use AlphaDiscoveryEngine for pattern discovery
+- Use EdgeQuantifier for real edge metrics
 """
 from __future__ import annotations
 
@@ -14,9 +19,12 @@ from cryptoswarms.position_manager import PositionManager, ExitReason
 from cryptoswarms.common.strategy import BaseStrategy
 from cryptoswarms.kelly_sizer import kelly_size
 
-logger = logging.getLogger("backtest.engine")
+logger = logging.getLogger("backtest.engine.legacy")
 
-class BacktestEngine:
+# DEPRECATED: Use AlphaDiscoveryEngine instead
+class LegacyBacktestEngine:
+
+class LegacyBacktestEngine:
     def __init__(
         self, 
         base_bankroll: float = 10000.0,

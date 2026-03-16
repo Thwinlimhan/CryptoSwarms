@@ -11,7 +11,9 @@ from cryptoswarms.fractional_kelly import (
     empirical_fractional_kelly, kelly_fraction, position_size_from_bankroll,
 )
 from cryptoswarms.base_rate_registry import (
-    BaseRateProfile, BaseRateRegistry, default_base_rate_registry,
+    LegacyBaseRateProfile as BaseRateProfile, 
+    LegacyBaseRateRegistry as BaseRateRegistry, 
+    default_base_rate_registry,
 )
 from cryptoswarms.failure_ledger import FailureLedger, DecisionRecord
 

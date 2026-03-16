@@ -11,6 +11,9 @@ from .execution_agent import (
     RiskSnapshot,
     TradeSignal,
 )
+from .execution_coordinator import ExecutionCoordinator
+from .order_persistence import OrderPersistence, OrderStatus, OrderRequest, PersistedOrder
+from .order_reconciler import OrderReconciler
 from .risk_monitor import InMemoryRiskEventLogger, RiskMonitor, RiskState
 from .skill_hub_clients import (
     AsterSkillHubClient,
@@ -29,6 +32,7 @@ __all__ = [
     "ConfirmGateError",
     "ExecutionAgent",
     "ExecutionConfig",
+    "ExecutionCoordinator",
     "ExecutionSizingPolicy",
     "GateCheckError",
     "HyperliquidExchangeAdapter",
@@ -37,6 +41,11 @@ __all__ = [
     "OkxExchangeAdapter",
     "OkxSkillHubClient",
     "OrderIntent",
+    "OrderPersistence",
+    "OrderReconciler",
+    "OrderRequest",
+    "OrderStatus",
+    "PersistedOrder",
     "RiskMonitor",
     "RiskSnapshot",
     "RiskState",

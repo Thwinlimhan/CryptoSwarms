@@ -115,25 +115,46 @@ class HyperliquidAdapter:
         }
         return await self.exchange(action)
 
-    async def execute(self, intent: OrderIntent, reduce_only: bool = False) -> None:
+    async def get_order_status(self, oid: int | str) -> dict[str, Any] | None:
+        """Fetch status of a specific order."""
+        # For HL, we can check open orders in user state
+        user_state = await self.get_user_state()
+        if not user_state:
+            return None
+            
+        # Check open orders
+        for order in user_state.get("openOrders", []):
+            if str(order.get("oid")) == str(oid):
+                return {
+                    "status": "open",
+                    "oid": order.get("oid"),
+                    "symbol": order.get("coin"),
+                    "limit_px": order.get("limitPx"),
+                    "sz": order.get("sz"),
+                }
+        
+        # If not in open orders, it might be filled or cancelled.
+        # Ideally we'd check trade history here.
+        # For now, let's assume if it's not open, it's 'closed'
+        return {"status": "closed", "oid": oid}
+
+    async def execute(self, intent: OrderIntent, reduce_only: bool = False) -> Any:
         """Implementation of OrderExecutor protocol."""
         # Simple market-ish limit order (taking 1% slippage for immediate fill in paper)
         side = intent.side.upper()
         is_buy = side == "BUY" or side == "LONG"
         
         # We need a price to place a limit order. For paper, we can fetch the mid.
-        # But for brevity, let's assume the strategy provided a price or we fetch it.
-        # Here we'll just log and try to place at a wide price for now.
         meta = await self.info("allMids")
-        price = float(meta.get(intent.symbol, 0))
+        price = float((meta or {}).get(intent.symbol, 0))
         if price == 0:
             logger.error(f"Cannot execute order: no price for {intent.symbol}")
-            return
+            return None
 
         # 1% slippage
         limit_px = price * 1.01 if is_buy else price * 0.99
         
-        await self.place_order(
+        return await self.place_order(
             coin=intent.symbol,
             is_buy=is_buy,
             size=intent.quantity,
