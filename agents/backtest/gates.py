@@ -295,3 +295,250 @@ def gate_6_correlation_check(
         score=1 - max_corr,
         details={"max_abs_correlation": max_corr, "correlations": corr_by_strategy},
     )
+
+
+# ── Gate 7: Swarm Regime Gate ──────────────────────────────────────────────
+
+from agents.backtest.mirofish_simulator import MiroFishRegimeSimulator
+
+
+def gate_7_swarm_regime(
+    candidate: StrategyCandidate,
+    simulator: MiroFishRegimeSimulator,
+    min_consensus: float = 0.55,
+) -> GateResult:
+    """Gate 7 — MiroFish emergent swarm consensus check.
+
+    Runs thousands of personality-driven simulated traders against the
+    candidate's market_data. Fails candidates the swarm collectively fades.
+
+    Args:
+        candidate: strategy candidate with market_data dict
+        simulator: configured MiroFishRegimeSimulator instance
+        min_consensus: minimum agent agreement fraction (default 0.55)
+    """
+    try:
+        verdict = simulator.simulate(
+            candidate.market_data if isinstance(candidate.market_data, dict) else {}
+        )
+    except Exception as exc:
+        return GateResult(
+            gate_number=7,
+            gate_name="swarm_regime_consensus",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    tradeable = simulator.is_tradeable(verdict)
+    return GateResult(
+        gate_number=7,
+        gate_name="swarm_regime_consensus",
+        status=GateStatus.PASS if tradeable else GateStatus.FAIL,
+        score=verdict.consensus_score,
+        details={
+            "regime": verdict.regime,
+            "consensus_score": verdict.consensus_score,
+            "whale_pressure": verdict.whale_pressure,
+            "momentum_pct": verdict.momentum_agents_pct,
+            "mean_revert_pct": verdict.mean_revert_agents_pct,
+            "noise_pct": verdict.noise_agents_pct,
+            "min_consensus_threshold": min_consensus,
+        },
+    )
+
+
+# ── Gate 8: Recipe Alignment Gate ──────────────────────────────────────────
+
+from agents.scanner.recipe_classifier import classify_recipe
+from agents.scanner.microstructure_primitives import compute_primitives
+from agents.research.lob_connector import HyperliquidLOBConnector
+
+
+def gate_8_recipe_alignment(
+    candidate: StrategyCandidate,
+    lob_connector: HyperliquidLOBConnector,
+    min_recipe_score: float = 0.70,
+    preferred_recipes: list[str] | None = None,
+) -> GateResult:
+    """Gate 8 — Microstructure recipe alignment check.
+
+    Classifies current market microstructure into one of 10 behavioral recipes
+    and validates that the strategy aligns with favorable regimes.
+
+    Args:
+        candidate: strategy candidate with market_data dict
+        lob_connector: configured HyperliquidLOBConnector for LOB data
+        min_recipe_score: minimum recipe confidence score (0.0-1.0)
+        preferred_recipes: list of recipe names to prefer, defaults to favorable ones
+    """
+    if preferred_recipes is None:
+        preferred_recipes = ["Trend Align", "Absorption", "Vacuum", "Shock"]
+    
+    symbol = candidate.params.get("symbol", "BTC")
+    
+    try:
+        # Fetch current LOB snapshot and recent trades
+        lob = lob_connector.fetch_lob(symbol)
+        trades = lob_connector.fetch_recent_trades(symbol)
+        
+        # Compute microstructure primitives
+        primitives = compute_primitives(
+            lob=lob,
+            trades=trades,
+            ofi_history=[],  # Would be populated from historical data in production
+        )
+        
+        # Classify into recipe
+        result = classify_recipe(primitives)
+        
+    except Exception as exc:
+        return GateResult(
+            gate_number=8,
+            gate_name="recipe_alignment",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    # Check if recipe score meets threshold and is in preferred list
+    score_ok = result.score >= min_recipe_score
+    recipe_ok = result.recipe in preferred_recipes
+    
+    return GateResult(
+        gate_number=8,
+        gate_name="recipe_alignment",
+        status=GateStatus.PASS if (score_ok and recipe_ok) else GateStatus.FAIL,
+        score=result.score,
+        details={
+            "detected_recipe": result.recipe,
+            "recipe_score": result.score,
+            "active_signals": result.active_signals,
+            "ofi": result.primitives.ofi,
+            "liquidity_gravity": result.primitives.liquidity_gravity,
+            "book_fragility": result.primitives.book_fragility,
+            "tape_pressure": result.primitives.net_tape_pressure,
+            "ofi_persistence": result.primitives.ofi_persistence,
+            "preferred_recipes": preferred_recipes,
+            "score_threshold": min_recipe_score,
+        },
+    )
+
+
+# ── Gate 9: Hyperspace Consensus Gate ──────────────────────────────────────
+
+from agents.orchestration.hyperspace_mesh import HyperspaceMeshClient
+
+
+def gate_9_hyperspace_consensus(
+    candidate: StrategyCandidate,
+    mesh_client: HyperspaceMeshClient,
+    min_consensus: float = 0.60,
+    min_participating_nodes: int = 3,
+) -> GateResult:
+    """Gate 9 — Hyperspace P2P mesh consensus check.
+
+    Fetches consensus from the decentralized Hyperspace network about
+    this strategy's validation. Requires agreement from multiple peer nodes.
+
+    Args:
+        candidate: strategy candidate
+        mesh_client: configured HyperspaceMeshClient
+        min_consensus: minimum consensus fraction (0.0-1.0)
+        min_participating_nodes: minimum number of nodes that must participate
+    """
+    try:
+        consensus = mesh_client.fetch_mesh_consensus(candidate.strategy_id)
+    except Exception as exc:
+        return GateResult(
+            gate_number=9,
+            gate_name="hyperspace_consensus",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    # Check consensus thresholds
+    consensus_ok = consensus.consensus_score >= min_consensus
+    participation_ok = consensus.participating_nodes >= min_participating_nodes
+    
+    return GateResult(
+        gate_number=9,
+        gate_name="hyperspace_consensus",
+        status=GateStatus.PASS if (consensus_ok and participation_ok) else GateStatus.FAIL,
+        score=consensus.rank_weighted_score,
+        details={
+            "consensus_score": consensus.consensus_score,
+            "rank_weighted_score": consensus.rank_weighted_score,
+            "participating_nodes": consensus.participating_nodes,
+            "dissenting_nodes": consensus.dissenting_nodes,
+            "min_consensus_threshold": min_consensus,
+            "min_participating_nodes": min_participating_nodes,
+            "timestamp": consensus.timestamp.isoformat(),
+        },
+    )
+
+
+# ── Gate 10: Funding Arbitrage Validation ──────────────────────────────────
+
+from agents.research.funding_rate_connector import HyperliquidFundingConnector
+
+
+def gate_10_funding_arbitrage(
+    candidate: StrategyCandidate,
+    funding_connector: HyperliquidFundingConnector,
+    min_yield_score: float = 0.30,
+    min_confidence: float = 0.60,
+) -> GateResult:
+    """Gate 10 — Funding arbitrage opportunity validation.
+
+    Validates that funding rate arbitrage opportunities exist with sufficient
+    yield potential and prediction confidence.
+
+    Args:
+        candidate: strategy candidate (should be funding arbitrage type)
+        funding_connector: configured HyperliquidFundingConnector
+        min_yield_score: minimum yield opportunity score (0.0-1.0)
+        min_confidence: minimum prediction confidence (0.0-1.0)
+    """
+    symbol = candidate.params.get("symbol", "BTC")
+    
+    try:
+        prediction = funding_connector.fetch_funding_prediction(symbol)
+    except Exception as exc:
+        return GateResult(
+            gate_number=10,
+            gate_name="funding_arbitrage",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    # Check yield and confidence thresholds
+    yield_ok = prediction.yield_opportunity_score >= min_yield_score
+    confidence_ok = prediction.confidence >= min_confidence
+    
+    # Additional check: funding rate should be significant enough to trade
+    funding_significant = abs(prediction.current_funding_rate) >= 5.0  # 5 bps minimum
+    
+    all_checks_pass = yield_ok and confidence_ok and funding_significant
+    
+    return GateResult(
+        gate_number=10,
+        gate_name="funding_arbitrage",
+        status=GateStatus.PASS if all_checks_pass else GateStatus.FAIL,
+        score=prediction.yield_opportunity_score * prediction.confidence,
+        details={
+            "current_funding_rate": prediction.current_funding_rate,
+            "predicted_funding_rate": prediction.predicted_funding_rate,
+            "predicted_flip_in_minutes": prediction.predicted_flip_in_minutes,
+            "confidence": prediction.confidence,
+            "yield_opportunity_score": prediction.yield_opportunity_score,
+            "min_yield_threshold": min_yield_score,
+            "min_confidence_threshold": min_confidence,
+            "funding_significant": funding_significant,
+            "venue": prediction.venue,
+        },
+    )
+
+
