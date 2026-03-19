@@ -1,0 +1,691 @@
+# BkDplx Microstructure Concepts: Honest Analysis
+
+**Researched: March 18, 2026 | Against codebase snapshot: 2026-03-16**
+
+-----
+
+## The One-Paragraph Verdict
+
+The underlying microstructure concepts are academically real, well-studied, and genuinely
+additive to CryptoSwarms. The BkDplx product itself is a closed-source Twitter personality’s
+scanner with no public API, no verifiable performance data, and zero primary documentation.
+The “deep technical analysis” reconstruction is competent speculation, not reverse engineering.
+**Build the concepts in-house from Hyperliquid’s free LOB data. Do not wait for or depend on
+BkDplx as a service.**
+
+-----
+
+## Part 1: Source Audit — What Is Actually Verifiable
+
+|Claim                                           |Source                       |Status                                            |
+|------------------------------------------------|-----------------------------|--------------------------------------------------|
+|BkDplx scanner exists                           |Twitter screenshots          |✅ Real product, confirmed by screenshots          |
+|No public GitHub / no API                       |Search + web                 |✅ Confirmed — zero public repos                   |
+|10 recipe names                                 |Twitter posts                |✅ Real taxonomy from the product                  |
+|Recipe Score range 0.70–0.82                    |Screenshot values            |⚠️ Real screenshot numbers, zero validation meaning|
+|OFI formula `(bid−ask)/(bid+ask)`               |Cont, Kukanov, Stoikov (2014)|✅ Canonical academic source                       |
+|Liquidity Gravity (depth center-of-mass)        |Standard LOB literature      |✅ Known technique                                 |
+|Book Fragility as `1/depth`                     |Standard LOB literature      |✅ Known concept                                   |
+|Trade Profile Bins (depth-relative execution)   |Volume Profile literature    |✅ Known technique                                 |
+|Arctan normalization `θ = arctan(Demand/Supply)`|The “deep analysis” document |❌ **Document’s own invention** — not from BkDplx  |
+|“Rust or Go backend”, “ClickHouse” tech stack   |The “deep analysis” document |❌ **Pure speculation** — no primary source        |
+|“Decision tree / weighted score” classifier     |The “deep analysis” document |❌ **Inferred, not confirmed**                     |
+|Recipe Score = “normalized weighted sum”        |The “deep analysis” document |❌ **Fabricated formula** — not from BkDplx        |
+|BkDplx performance data                         |Nowhere                      |❌ **Does not exist publicly**                     |
+
+**Bottom line on the “deep technical analysis”**: It reads like confident reverse engineering.
+It is not. It is educated extrapolation from Twitter screenshots dressed as ground truth.
+The formulas it presents for Recipe Score, the tech stack, and the arctan normalization
+are the document author’s constructions — useful hypotheses, not confirmed architecture.
+
+-----
+
+## Part 2: Academic Grounding of the Core Concepts
+
+Each concept below is assessed against real literature, independent of BkDplx.
+
+### 2.1 Order Flow Imbalance (OFI) — Grade: A
+
+**Formula:** `I = (BidSize − AskSize) / (BidSize + AskSize)`
+
+This is one of the best-validated short-term alpha signals in market microstructure.
+Cont, Kukanov, and Stoikov (Journal of Financial Econometrics, 2014) established it as
+the primary driver of contemporaneous price impact. Multi-level OFI (Xu, Gould, Howison
+2018) substantially increases explanatory power beyond top-of-book. Academic consensus:
+OFI predicts short-term price direction with R² of 60-80% at high frequency.
+
+**Verdict**: Implement this. It is real, computable from Hyperliquid’s free LOB API, and
+academically proven. This is the single highest-value concept in the entire document.
+
+### 2.2 Liquidity Gravity (Depth Center-of-Mass) — Grade: B+
+
+**Formula:** `G = Σ(Price_i × Depth_i) / Σ(Depth_i)`
+
+This is a real and sensible concept — the “center of mass” of the order book, measuring
+where liquidity is concentrated. It captures the pull effect of large standing limit orders.
+Not as academically established as OFI but well-understood among practitioners.
+
+**Verdict**: Implement. Derivable from full order book snapshots. Hyperliquid’s `/info`
+endpoint with `{"type": "l2Book"}` provides this data for free with no auth.
+
+### 2.3 SLS Structure (Stop-Loss Structure) — Grade: B
+
+This maps to “persistent imbalance direction” — a rolling count of candles where OFI
+stayed consistently one-sided. It approximates the concept of “order flow toxicity” from
+Easley et al.’s VPIN framework (Volume-Synchronized Probability of Informed Trading).
+
+**Verdict**: Implement as a rolling window OFI persistence metric. 10–20 candle lookback
+is sufficient. No special data needed beyond what OFI already computes.
+
+### 2.4 Book Fragility — Grade: B
+
+**Formula:** `F = 1 / (DepthAtCurrentPrice + ε)`
+
+Thin book = violent moves when flow arrives. This is the inverse of Kyle (1985)’s “depth”
+measure — the size of order flow required to move price by one tick. Well-understood.
+
+**Verdict**: Implement. Single computation from the LOB snapshot.
+
+### 2.5 Trade Profile Bins — Grade: B+
+
+Volume profile at depth: grouping executed trades by their position relative to current
+order book depth levels. This reveals whether trades are hitting supported levels (depth-backed)
+or thin zones (fragility-confirming). More powerful than standard volume profile because
+it is depth-relative, not just price-relative.
+
+**Verdict**: Implement. Requires matching trade tape timestamps to LOB snapshots (100ms
+resolution is sufficient). Hyperliquid’s trade tape is freely accessible.
+
+### 2.6 Arctan Normalization — Grade: C (as presented)
+
+**Claimed formula:** `θ_price = arctan(Demand/Supply)` compressing to 0°-90°
+
+The idea of arctan normalization for bounded comparison is mathematically sound — arctan
+maps any positive ratio to (0°, 90°), making cross-asset and cross-timeframe comparisons
+unit-consistent. However, `arctan(Demand/Supply)` is the document author’s formulation,
+not a confirmed BkDplx feature. The signal content is equivalent to the OFI formula with
+a nonlinear transformation applied. It is a stylistic choice, not a novel alpha source.
+
+**Verdict**: Skip as a separate primitive. If you compute OFI properly, you already have
+the directional information. Arctan rescaling can be added as a normalization step for
+cross-asset comparison dashboards, but it does not add alpha.
+
+### 2.7 The 10 Recipe Taxonomy — Grade: B (as a framework)
+
+The 10 states are recognizable microstructure regimes with academic backing:
+
+|Recipe               |Academic Analog                           |Implemented Via                     |
+|---------------------|------------------------------------------|------------------------------------|
+|Trend Align          |High OFI persistence + depth support      |Rolling OFI + Gravity alignment     |
+|Exhaustion           |OFI flip at price extreme + high fragility|OFI zero-cross + F spike            |
+|Absorption           |Strong tape flow + price stall            |Delta vs. price divergence          |
+|Vacuum               |Near-zero depth + OFI spike               |F extreme + I spike                 |
+|Trap                 |Brief OFI flip + unchanged SLS            |OFI reversal duration < N candles   |
+|Structural Divergence|Price direction ≠ OFI direction           |Signed correlation price vs. OFI    |
+|Shock                |Sudden depth collapse + extreme I         |F derivative spike                  |
+|Drift                |Slow price move vs. strong opposing G     |Price velocity vs. Gravity direction|
+|Compression          |Tight range + building OFI tension        |Range contraction +                 |
+|Conflict             |Opposing OFI and Gravity                  |I × sign(G) < threshold             |
+
+This is a valid and useful taxonomy. The specific weights, score thresholds (0.70–0.82),
+and rule boundaries are BkDplx’s proprietary choices and need to be calibrated empirically
+on your own data.
+
+**Verdict**: Use as a taxonomy. Calibrate thresholds yourself on Hyperliquid historical LOB.
+
+-----
+
+## Part 3: What Is NOT Worth Believing
+
+### The Recipe Score 0.70–0.82 Range
+
+These numbers appear in screenshots as the current day’s output. They are not accuracy
+metrics. They are probably the classifier’s output score (confidence) for the detected recipe
+on that day’s pairs. Treating 0.75 as “high confidence” for a gate threshold requires
+validation against outcomes you don’t have. Do not use these numbers as-is.
+
+### The “Inferred” Tech Stack
+
+Rust/Go backend, ClickHouse, Redis pub/sub — these are reasonable guesses for a
+high-performance scanner. They are not confirmed BkDplx architecture. When you build
+your own, use whatever fits your stack. Python + TimescaleDB (which you already have) is
+sufficient for 100ms LOB updates on Hyperliquid’s ~50 active perp markets.
+
+### BkDplx as a Service Dependency
+
+No API, no docs, no SLA, no public roadmap. The “upcoming features” section (behavioral
+alerts, execution integration) are teased Twitter announcements. Building production code
+that waits for an unannounced API from a closed Twitter product is not advisable.
+
+-----
+
+## Part 4: What Your Codebase Already Has vs. What’s Missing
+
+### What You Already Have
+
+- `agents/research/onchain_connector.py` — `WhaleFlowConnector` fetches large transfers,
+  computes directional signal. This is a crude approximation of “Net Buying Pressure”.
+- `agents/backtest/gates.py` — `gate_5_regime_evaluation` + `DefaultRegimeTagger` already
+  does regime-segmented backtesting. The regime tagger is currently a pass-through.
+- `agents/backtest/adapters.py` — `DefaultRegimeTagger.__call__()` returns `{"regimes": {"all": market_data}}`.
+  This is the exact injection point for OFI-based state classification.
+- `cryptoswarms/bayesian_update.py` — `sequential_bayes_update()` can consume regime-level
+  priors. OFI state classification produces exactly the kind of likelihood update it expects.
+- `cryptoswarms/memory_dag.py` — ideal for caching LOB state snapshots between calls.
+
+### What Is Missing (The Gap to Fill)
+
+1. **LOB data pipeline**: No code fetches `l2Book` from Hyperliquid. This is the single
+   biggest gap — everything else is a transform on top of this data.
+1. **Trade tape timestamping**: `WhaleFlowConnector` fetches aggregate whale transfers, not
+   the per-trade tape needed for OFI computation.
+1. **OFI signal computation**: The core formula isn’t implemented anywhere.
+1. **StateTagger upgrade**: `DefaultRegimeTagger` is a stub. The OFI-based `OFIStateTagger`
+   is the upgrade.
+
+-----
+
+## Part 5: What to Build — Grounded, In-House Implementation
+
+All of the following uses Hyperliquid’s free, no-authentication public API.
+
+### 5.1 LOB Data Fetcher
+
+```python
+# agents/research/lob_connector.py
+"""
+Hyperliquid Level-2 Order Book connector.
+No authentication required.
+Endpoint: POST https://api.hyperliquid.xyz/info
+"""
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+
+class HttpTransport(Protocol):
+    def post(self, url: str, payload: dict) -> dict: ...
+
+
+@dataclass(frozen=True)
+class LOBSnapshot:
+    symbol: str
+    bids: list[tuple[float, float]]   # (price, size) sorted descending
+    asks: list[tuple[float, float]]   # (price, size) sorted ascending
+    timestamp_ms: int
+
+
+@dataclass(slots=True)
+class HyperliquidLOBConnector:
+    """
+    Fetches full L2 order book from Hyperliquid.
+    Hyperliquid exposes top-of-book + N levels (typically 5-20 levels).
+    """
+    transport: HttpTransport
+    base_url: str = "https://api.hyperliquid.xyz/info"
+
+    def fetch_lob(self, symbol: str) -> LOBSnapshot:
+        resp = self.transport.post(self.base_url, {
+            "type": "l2Book",
+            "coin": symbol,
+        })
+        levels = resp.get("levels", [[], []])
+        bids = [(float(p["px"]), float(p["sz"])) for p in levels[0]]
+        asks = [(float(p["px"]), float(p["sz"])) for p in levels[1]]
+        return LOBSnapshot(
+            symbol=symbol,
+            bids=sorted(bids, reverse=True),
+            asks=sorted(asks),
+            timestamp_ms=resp.get("time", 0),
+        )
+
+    def fetch_recent_trades(self, symbol: str) -> list[dict]:
+        """Fetch recent executed trades for tape OFI computation."""
+        return self.transport.post(self.base_url, {
+            "type": "trades",
+            "coin": symbol,
+        })
+```
+
+### 5.2 Microstructure Primitives — Real Formulas
+
+```python
+# agents/scanner/microstructure_primitives.py
+"""
+Academically grounded microstructure primitives.
+Sources: Cont et al. (2014), Kyle (1985), Xu et al. (2018)
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class MicrostructurePrimitives:
+    ofi: float               # Order Flow Imbalance [-1, +1]
+    liquidity_gravity: float # Depth center-of-mass (price units)
+    book_fragility: float    # 1/depth at best bid/ask [0, ∞)
+    net_tape_pressure: float # Buy tape % − 0.5 [-0.5, +0.5]
+    ofi_persistence: float   # Rolling OFI same-sign streak [0, 1]
+    mid_price: float
+
+
+def compute_ofi(lob: "LOBSnapshot") -> float:
+    """
+    Order Flow Imbalance from Cont, Kukanov, Stoikov (2014).
+    Uses top-of-book bid/ask sizes.
+    Range: [-1, +1]. Positive = buy pressure dominant.
+    """
+    if not lob.bids or not lob.asks:
+        return 0.0
+    bid_size = lob.bids[0][1]
+    ask_size = lob.asks[0][1]
+    total = bid_size + ask_size
+    if total < 1e-10:
+        return 0.0
+    return (bid_size - ask_size) / total
+
+
+def compute_multilevel_ofi(lob: "LOBSnapshot", n_levels: int = 5) -> float:
+    """
+    Multi-Level OFI from Xu, Gould, Howison (2018).
+    Combines OFI across N book levels via PCA-inspired weighting.
+    Substantially better predictive power than top-of-book only.
+    """
+    level_ofis: list[float] = []
+    for i in range(min(n_levels, len(lob.bids), len(lob.asks))):
+        bid_sz = lob.bids[i][1]
+        ask_sz = lob.asks[i][1]
+        total = bid_sz + ask_sz
+        level_ofis.append((bid_sz - ask_sz) / total if total > 1e-10 else 0.0)
+
+    if not level_ofis:
+        return 0.0
+    # Decay weights: closer levels get higher weight
+    weights = [1.0 / (i + 1) for i in range(len(level_ofis))]
+    total_w = sum(weights)
+    return sum(o * w for o, w in zip(level_ofis, weights)) / total_w
+
+
+def compute_liquidity_gravity(lob: "LOBSnapshot", n_levels: int = 10) -> float:
+    """
+    Depth-weighted center of mass of the order book.
+    Negative value = gravity pulling price down (ask-heavy).
+    Positive value = gravity pulling price up (bid-heavy).
+    Normalized as deviation from mid-price.
+    """
+    if not lob.bids or not lob.asks:
+        return 0.0
+    mid = (lob.bids[0][0] + lob.asks[0][0]) / 2.0
+
+    bid_levels = lob.bids[:n_levels]
+    ask_levels = lob.asks[:n_levels]
+
+    bid_gravity = sum(p * s for p, s in bid_levels)
+    ask_gravity = sum(p * s for p, s in ask_levels)
+    bid_depth = sum(s for _, s in bid_levels)
+    ask_depth = sum(s for _, s in ask_levels)
+
+    if bid_depth < 1e-10 or ask_depth < 1e-10:
+        return 0.0
+
+    bid_center = bid_gravity / bid_depth
+    ask_center = ask_gravity / ask_depth
+    # Positive = bid center of mass is closer to mid (bid support)
+    # Negative = ask center of mass is closer to mid (ask pressure)
+    return ((mid - bid_center) - (ask_center - mid)) / mid
+
+
+def compute_book_fragility(lob: "LOBSnapshot") -> float:
+    """
+    Inverse of top-of-book depth. High = thin book = violent moves likely.
+    Kyle (1985): depth = amount of flow to move price by one tick.
+    Normalized by mid-price to be comparable across instruments.
+    """
+    if not lob.bids or not lob.asks:
+        return 1.0
+    mid = (lob.bids[0][0] + lob.asks[0][0]) / 2.0
+    best_depth = lob.bids[0][1] + lob.asks[0][1]
+    if best_depth < 1e-10 or mid < 1e-10:
+        return 1.0
+    # Scale: fragility = 1 / (depth_in_USD). Clip at [0, 1].
+    depth_usd = best_depth * mid
+    return min(1.0, 1000.0 / max(depth_usd, 1.0))  # 1000 USD is "thin"
+
+
+def compute_net_tape_pressure(trades: list[dict], lookback_n: int = 50) -> float:
+    """
+    Net buying pressure from recent trade tape.
+    Returns fraction of buy-initiated volume minus 0.5.
+    Range: [-0.5, +0.5]. Positive = buy pressure.
+    """
+    recent = trades[-lookback_n:]
+    if not recent:
+        return 0.0
+    buy_vol = sum(float(t.get("sz", 0)) for t in recent if t.get("side", "").lower() == "b")
+    total_vol = sum(float(t.get("sz", 0)) for t in recent)
+    if total_vol < 1e-10:
+        return 0.0
+    return (buy_vol / total_vol) - 0.5
+
+
+def compute_primitives(
+    lob: "LOBSnapshot",
+    trades: list[dict],
+    ofi_history: list[float],  # last N OFI values for persistence
+    n_levels: int = 5,
+    persistence_window: int = 10,
+) -> MicrostructurePrimitives:
+    ofi = compute_multilevel_ofi(lob, n_levels)
+    gravity = compute_liquidity_gravity(lob, n_levels * 2)
+    fragility = compute_book_fragility(lob)
+    tape = compute_net_tape_pressure(trades)
+
+    # OFI persistence: fraction of last N readings with same sign as current
+    if ofi_history and len(ofi_history) >= 2:
+        sign_match = sum(
+            1 for h in ofi_history[-persistence_window:]
+            if (h > 0) == (ofi > 0)
+        )
+        persistence = sign_match / min(len(ofi_history), persistence_window)
+    else:
+        persistence = 0.5
+
+    mid = (lob.bids[0][0] + lob.asks[0][0]) / 2.0 if lob.bids and lob.asks else 0.0
+
+    return MicrostructurePrimitives(
+        ofi=round(ofi, 4),
+        liquidity_gravity=round(gravity, 6),
+        book_fragility=round(fragility, 4),
+        net_tape_pressure=round(tape, 4),
+        ofi_persistence=round(persistence, 4),
+        mid_price=round(mid, 2),
+    )
+```
+
+### 5.3 Recipe Classifier — Calibrate Thresholds on Your Own Data
+
+```python
+# agents/scanner/recipe_classifier.py
+"""
+10-state microstructure recipe classifier.
+Thresholds are placeholders — calibrate empirically on your
+Hyperliquid historical LOB data before using in gates.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from agents.scanner.microstructure_primitives import MicrostructurePrimitives
+
+
+# ── THRESHOLDS — tune these on your data ───────────────────────────────────
+# Do NOT copy the 0.70-0.82 range from screenshots — those are output scores,
+# not input thresholds. Calibrate on 30+ days of Hyperliquid LOB history.
+OFI_STRONG     = 0.30   # strong directional imbalance
+OFI_FLIP       = 0.05   # near-zero = potential flip
+GRAVITY_STRONG = 0.001  # significant depth center-of-mass pull
+FRAGILITY_HIGH = 0.60   # thin book
+FRAGILITY_MOD  = 0.30   # moderate fragility
+TAPE_STRONG    = 0.20   # 70%+ buy or sell domination
+PERSIST_HIGH   = 0.75   # OFI same-signed 75%+ of recent candles
+PERSIST_LOW    = 0.35   # OFI direction unstable
+
+
+@dataclass(frozen=True)
+class RecipeResult:
+    recipe: str
+    score: float          # 0.0–1.0 — calibrate meaning before using as gate threshold
+    primitives: MicrostructurePrimitives
+    active_signals: list[str]  # which primitives triggered this recipe
+
+
+def classify_recipe(p: MicrostructurePrimitives) -> RecipeResult:
+    """
+    Rule-based recipe classification from microstructure primitives.
+
+    IMPORTANT: Recipe score is a weighted sum of matching conditions.
+    It does NOT mean "probability of success". Validate empirically before
+    using as a gate_8 threshold. Start with conservative thresholds (>0.70).
+    """
+    scores: dict[str, tuple[float, list[str]]] = {}
+
+    # ── 1. TREND ALIGN ─────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if abs(p.ofi) > OFI_STRONG: score += 0.35; signals.append("strong_ofi")
+    if p.ofi_persistence > PERSIST_HIGH: score += 0.25; signals.append("ofi_persistence")
+    if abs(p.liquidity_gravity) > GRAVITY_STRONG and \
+       (p.liquidity_gravity > 0) == (p.ofi > 0): score += 0.25; signals.append("gravity_aligned")
+    if p.book_fragility < FRAGILITY_MOD: score += 0.15; signals.append("book_supported")
+    scores["Trend Align"] = (round(score, 3), signals)
+
+    # ── 2. EXHAUSTION ──────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if p.ofi_persistence > PERSIST_HIGH: score += 0.30; signals.append("extended_run")
+    if abs(p.ofi) < OFI_FLIP: score += 0.35; signals.append("ofi_stalling")
+    if p.book_fragility > FRAGILITY_HIGH: score += 0.20; signals.append("thin_book_at_extreme")
+    if abs(p.net_tape_pressure) < 0.10: score += 0.15; signals.append("tape_drying_up")
+    scores["Exhaustion"] = (round(score, 3), signals)
+
+    # ── 3. ABSORPTION ─────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if abs(p.net_tape_pressure) > TAPE_STRONG: score += 0.35; signals.append("strong_tape")
+    if abs(p.ofi) < OFI_FLIP: score += 0.35; signals.append("price_not_moving")
+    if abs(p.liquidity_gravity) > GRAVITY_STRONG and \
+       (p.liquidity_gravity > 0) != (p.net_tape_pressure > 0): score += 0.30; signals.append("gravity_absorbing")
+    scores["Absorption"] = (round(score, 3), signals)
+
+    # ── 4. VACUUM ─────────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if p.book_fragility > 0.80: score += 0.50; signals.append("extreme_fragility")
+    if abs(p.ofi) > OFI_STRONG: score += 0.30; signals.append("ofi_spike_into_vacuum")
+    if abs(p.liquidity_gravity) < 0.0001: score += 0.20; signals.append("gravity_absent")
+    scores["Vacuum"] = (round(score, 3), signals)
+
+    # ── 5. TRAP ───────────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if p.ofi_persistence < PERSIST_LOW: score += 0.30; signals.append("ofi_unstable")
+    if p.book_fragility > FRAGILITY_HIGH: score += 0.30; signals.append("thin_at_breakout")
+    if abs(p.liquidity_gravity) > GRAVITY_STRONG and \
+       (p.liquidity_gravity > 0) != (p.ofi > 0): score += 0.40; signals.append("gravity_opposing_ofi")
+    scores["Trap"] = (round(score, 3), signals)
+
+    # ── 6. STRUCTURAL DIVERGENCE ───────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if abs(p.ofi) > OFI_STRONG: score += 0.30; signals.append("price_flow_strong")
+    if abs(p.liquidity_gravity) > GRAVITY_STRONG and \
+       (p.liquidity_gravity > 0) != (p.ofi > 0): score += 0.40; signals.append("gravity_vs_flow")
+    if p.ofi_persistence > 0.60 and \
+       (p.net_tape_pressure > 0) != (p.ofi > 0): score += 0.30; signals.append("tape_vs_book")
+    scores["Structural Divergence"] = (round(score, 3), signals)
+
+    # ── 7. SHOCK ──────────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if p.book_fragility > FRAGILITY_HIGH: score += 0.35; signals.append("depth_collapsed")
+    if abs(p.ofi) > 0.60: score += 0.40; signals.append("extreme_ofi")
+    if abs(p.net_tape_pressure) > 0.35: score += 0.25; signals.append("tape_spike")
+    scores["Shock"] = (round(score, 3), signals)
+
+    # ── 8. DRIFT ──────────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if abs(p.ofi) < OFI_FLIP: score += 0.30; signals.append("weak_flow")
+    if p.ofi_persistence < 0.50: score += 0.30; signals.append("inconsistent_direction")
+    if abs(p.liquidity_gravity) > GRAVITY_STRONG and \
+       (p.liquidity_gravity > 0) != (p.ofi > 0): score += 0.40; signals.append("grinding_against_gravity")
+    scores["Drift"] = (round(score, 3), signals)
+
+    # ── 9. COMPRESSION ────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if p.book_fragility > FRAGILITY_MOD and \
+       p.book_fragility < FRAGILITY_HIGH: score += 0.35; signals.append("moderate_tension")
+    if 0.15 < abs(p.ofi) < OFI_STRONG: score += 0.35; signals.append("building_imbalance")
+    if abs(p.liquidity_gravity) < 0.0005: score += 0.30; signals.append("gravity_balanced")
+    scores["Compression"] = (round(score, 3), signals)
+
+    # ── 10. CONFLICT ──────────────────────────────────────────────────────
+    signals = []
+    score = 0.0
+    if (p.liquidity_gravity > 0) != (p.ofi > 0): score += 0.35; signals.append("book_vs_flow")
+    if (p.net_tape_pressure > 0) != (p.ofi > 0): score += 0.35; signals.append("tape_vs_book")
+    if p.ofi_persistence < 0.50: score += 0.30; signals.append("no_dominant_direction")
+    scores["Conflict"] = (round(score, 3), signals)
+
+    # ── Select best recipe ─────────────────────────────────────────────────
+    best_recipe = max(scores.items(), key=lambda x: x[1][0])
+    recipe_name = best_recipe[0]
+    recipe_score, active_signals = best_recipe[1]
+
+    return RecipeResult(
+        recipe=recipe_name,
+        score=recipe_score,
+        primitives=p,
+        active_signals=active_signals,
+    )
+```
+
+### 5.4 Gate Integration — Wire into `gate_5_regime_evaluation`
+
+```python
+# agents/backtest/adapters.py — add OFIStateTagger
+
+from agents.scanner.microstructure_primitives import compute_primitives, MicrostructurePrimitives
+from agents.scanner.recipe_classifier import classify_recipe, RecipeResult
+from agents.research.lob_connector import HyperliquidLOBConnector
+
+
+@dataclass(slots=True)
+class OFIRegimeTagger:
+    """
+    Replaces DefaultRegimeTagger with OFI-based microstructure state classification.
+    Compatible with gate_5_regime_evaluation's existing interface — no gate changes needed.
+
+    Uses your existing market_data dict. If "lob_snapshot" and "trade_tape" keys are
+    present, computes real-time primitives. Falls back to DefaultRegimeTagger behavior
+    if LOB data is absent (safe degradation).
+
+    Integration: wire in production.py as regime_tagger= when building ValidationPipeline.
+    """
+    lob_connector: HyperliquidLOBConnector | None = None
+    ofi_history: list[float] = None  # populated at runtime
+
+    def __post_init__(self):
+        if self.ofi_history is None:
+            object.__setattr__(self, "ofi_history", [])
+
+    def __call__(self, market_data: Any) -> dict[str, Any]:
+        md = market_data if isinstance(market_data, dict) else {}
+
+        # Try live LOB snapshot
+        symbol = str(md.get("symbol", "BTC"))
+        lob = md.get("lob_snapshot")
+        trades = md.get("trade_tape", [])
+
+        if lob is None and self.lob_connector is not None:
+            try:
+                lob = self.lob_connector.fetch_lob(symbol)
+                trades = self.lob_connector.fetch_recent_trades(symbol)
+            except Exception:
+                lob = None
+
+        if lob is None:
+            # Safe degradation: return single "all" regime (DefaultRegimeTagger behavior)
+            return {"regimes": {"all": market_data}}
+
+        primitives = compute_primitives(
+            lob=lob,
+            trades=trades,
+            ofi_history=self.ofi_history,
+        )
+        self.ofi_history.append(primitives.ofi)
+        if len(self.ofi_history) > 50:
+            self.ofi_history.pop(0)
+
+        result = classify_recipe(primitives)
+        recipe_key = result.recipe.lower().replace(" ", "_")
+
+        return {
+            "regimes": {recipe_key: market_data},
+            "microstructure": {
+                "recipe": result.recipe,
+                "score": result.score,
+                "ofi": primitives.ofi,
+                "gravity": primitives.liquidity_gravity,
+                "fragility": primitives.book_fragility,
+                "tape_pressure": primitives.net_tape_pressure,
+                "ofi_persistence": primitives.ofi_persistence,
+                "active_signals": result.active_signals,
+            },
+        }
+```
+
+### 5.5 The Only Signal Worth Adding to `program.md`
+
+The submitted doc suggested: *“Never use complex indicator baskets. Prefer single EMA or
+recipe-aligned setups.”* This is directionally correct. Add to `agents/evolution/program.md`:
+
+```markdown
+## Microstructure Alignment Rule (added 2026-03-18)
+- When editing strategy entry logic, check `candidate.market_data["microstructure"]["recipe"]`
+- Prefer entries in: Trend Align, Absorption, Vacuum, Shock recipes
+- Avoid entries in: Conflict, Drift, Exhaustion (highest failure rate in backtests)
+- Never add indicator layers that conflict with OFI direction at entry
+- Source: OFI primitives from Hyperliquid LOB — see agents/scanner/microstructure_primitives.py
+```
+
+-----
+
+## Part 6: Calibration Plan — Before Using in Gates
+
+**Do not add a `gate_8_recipe_alignment` gate until you have empirically validated
+recipe → forward_return distributions on your own Hyperliquid historical data.**
+
+The roadmap’s Recipe Score thresholds were pulled from Twitter screenshots of one tool’s
+output on one day. Here is the minimum validation needed:
+
+```python
+# scripts/calibrate_recipe_thresholds.py
+"""
+Step 1: Collect 30 days of Hyperliquid LOB snapshots at 1-minute intervals
+Step 2: Classify each snapshot into a recipe
+Step 3: Compute forward 15-min return for each recipe classification
+Step 4: Check: do Trend Align / Absorption forward returns differ from Conflict / Drift?
+Step 5: Set gate threshold to score percentile where forward return is consistently positive
+
+Target validation output:
+{
+  "Trend Align":          {"n": 1240, "mean_15m_return": +0.0031, "sharpe": 1.82},
+  "Absorption":           {"n": 890,  "mean_15m_return": +0.0021, "sharpe": 1.45},
+  "Conflict":             {"n": 3200, "mean_15m_return": +0.0002, "sharpe": 0.21},
+  "Drift":                {"n": 1100, "mean_15m_return": -0.0008, "sharpe": -0.44},
+}
+# If this distribution holds, gate_8 makes sense.
+# If it doesn't hold, do not add gate_8 — you'll be filtering on noise.
+"""
+```
+
+-----
+
+## Summary: The 3-Line Verdict
+
+**Worth using**: OFI, Liquidity Gravity, Book Fragility, Trade Profile Bins, the 10-recipe
+taxonomy as a classification framework. All buildable from Hyperliquid’s free API in ~300
+lines of Python. Wire into `DefaultRegimeTagger` to immediately enrich `gate_5`.
+
+**Not worth using**: BkDplx as a service dependency, the arctan normalization as a
+standalone signal, Recipe Score thresholds from screenshots, the “inferred” tech stack,
+any gate threshold based on unvalidated numbers.
+
+**The one critical step before adding gate_8**: Run 30 days of historical validation to
+confirm recipe → forward return distributions hold on your instruments. Without this,
+`gate_8_recipe_alignment` filters on noise. With it, it becomes a genuine alpha filter.

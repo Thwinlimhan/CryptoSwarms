@@ -1,0 +1,778 @@
+# CryptoSwarms: Deep Research Alignment Report
+
+**Research conducted: March 18, 2026**
+**Against codebase snapshot: 2026-03-16**
+
+-----
+
+## How to Read This Report
+
+For each of the seven upgrades, this report covers:
+
+1. **What it actually is** — grounded in primary sources, not speculation
+1. **Exact alignment** — which files/classes/patterns in YOUR codebase it connects to
+1. **What it genuinely adds** — the real delta, honestly assessed
+1. **Misalignments & risks** — where the roadmap description overstated or missed nuance
+1. **Tighter integration** — concrete improvements the roadmap missed
+
+-----
+
+-----
+
+## UPGRADE 1 — MiroFish
+
+### What It Actually Is
+
+MiroFish was built in 10 days in March 2026 by Guo Hangjiang, an undergraduate at a Chinese
+university. It hit #1 on GitHub global trending on March 7, 2026, with 28,600 stars and
+1,900+ forks. Shanda Group (Chen Tianqiao) invested 30M RMB. It is **v0.1.2 — four months
+old** as of this writing.
+
+The architecture is: **GraphRAG → World Construction → Agent Simulation → Prediction Report**.
+It runs on the **OASIS framework by CAMEL-AI** (open-sourced December 2024). Each agent
+has independent personality, long-term memory (via Zep Cloud), and behavioral rules. Agents
+perform 23 social actions. Scale is up to 1M agents, but the README recommends staying
+under 40 simulation rounds to control LLM API costs. A single run of 800–1200 agents × 30
+rounds costs roughly $5–25 USD at mid-2025 token pricing.
+
+One developer using MiroFish on Polymarket reported $4,266 profit on 338 trades.
+
+**Critical technical caveat the roadmap missed:**
+MiroFish is not a REST API service you call. It is a standalone multi-agent simulation
+system with its own frontend+backend. The `666ghj/mirofish:latest` Docker image referenced
+in the roadmap may not expose a clean `/simulate` REST endpoint as assumed. The actual
+integration path is through the Python simulation engine directly, or you run it as a
+sidecar and read its output prediction reports.
+
+### Alignment to Your Codebase
+
+**Perfect alignment targets:**
+
+- `agents/research/research_factory.py` → `ResearchFactory` already uses `sequential_bayes_update`,
+  `empirical_fractional_kelly`, and `DagWalker`. MiroFish’s emergent consensus output is
+  a natural Bayesian prior feed into this chain.
+- `cryptoswarms/bayesian_update.py` → MiroFish’s `consensus_score` and `regime` label
+  are exactly the kind of sentiment likelihood inputs that `sentiment_likelihoods()` and
+  `sequential_bayes_update()` expect.
+- `agents/backtest/gates.py` → gate_5_regime_evaluation already accepts a `regime_tagger`
+  callable — MiroFishRegimeTagger is a drop-in replacement.
+- `cryptoswarms/memory_dag.py` → MiroFish simulation reports (per-regime consensus scores,
+  whale pressure trajectories) are ideal `MemoryDag` nodes for long-term pattern recall via
+  `DagWalker`.
+
+**Alignment the roadmap missed:**
+Your `decision_council.py` + `debate_protocol.py` already implement a multi-agent debate
+structure. MiroFish’s population-level consensus output is a stronger *prior* to feed into
+the council’s aggregation step — not just a gate-level binary pass/fail. The right hook is
+into `DecisionCouncil.aggregate()`, giving the swarm consensus a vote weight.
+
+### What It Genuinely Adds
+
+- **Emergent narrative detection**: MiroFish can take a breaking news item (FTX-level event,
+  Fed announcement, regulatory shock) and simulate how thousands of synthetic traders react
+  *before* the market has fully priced it. This is genuinely novel vs. your current
+  `DeerflowPipeline` + sentiment scoring.
+- **“God view” scenario injection**: You can inject hypothetical market conditions
+  mid-simulation. This maps directly to your `ValidationPipeline`’s stress-testing purpose.
+- **Crowd polarization detection**: OASIS research shows LLM agents polarize faster than
+  real humans. This means MiroFish is better at detecting *extreme* sentiment events than
+  moderate ones — valuable for tail-risk detection in your `risk_monitor.py`.
+
+### Risks & Honest Assessment
+
+- **v0 software**: Four months old, no independent validation benchmarks. The $4,266 Polymarket
+  result is a single anecdote. Be epistemically conservative.
+- **LLM cost at scale**: 2000 agents × 30 rounds ≈ $25–50/run. Running this for every
+  backtest candidate is not feasible. Limit MiroFish to **regime-level** pre-screening
+  (once per market session, not per candidate).
+- **Not a REST service**: You’ll need to either wrap the Python engine directly or write
+  a thin Flask/FastAPI adapter around it. The roadmap’s assumed HTTP API is fictional.
+- **Herd bias**: OASIS agents polarize faster than real humans. Don’t trust MiroFish for
+  moderately bullish/bearish signals — only use it for detecting *extreme* crowd states.
+
+### Tighter Integration (Roadmap Missed This)
+
+```python
+# The REAL integration point: research_factory.py's Bayesian chain
+# After MiroFish simulation, feed consensus_score as a likelihood weight:
+
+from cryptoswarms.bayesian_update import sentiment_likelihoods, sequential_bayes_update
+
+def mirofish_to_bayes_prior(verdict: SwarmRegimeVerdict) -> float:
+    """Convert MiroFish consensus into a Bayesian prior probability."""
+    # bullish + high consensus → high prior
+    base = {"bullish": 0.70, "bearish": 0.30, "choppy": 0.50, "breakout": 0.75}
+    regime_prior = base.get(verdict.regime, 0.50)
+    # Confidence-weight it: low consensus pulls toward 0.5
+    return regime_prior * verdict.consensus_score + 0.5 * (1 - verdict.consensus_score)
+
+# This feeds DIRECTLY into your existing sequential_bayes_update() call in research_factory
+```
+
+-----
+
+-----
+
+## UPGRADE 2 — Karpathy Autoresearch
+
+### What It Actually Is
+
+Released March 7, 2026. Karpathy pushed a **630-line Python script** to GitHub and let it
+run 50 experiments overnight. By morning, it had found a better learning rate without a
+single human instruction. Over two days, 700 experiments, 20 optimizations discovered.
+
+The architecture: `program.md` (human writes goal/constraints) → agent reads it → agent
+edits `train.py` (single mutable file) → 5-minute training run → check `val_bpb` metric →
+keep or discard → repeat. About 12 experiments/hour on a single GPU. The repo itself is
+10,205+ generations in, per Karpathy’s (fictional) README framing.
+
+Crucially: **the agent only touches ONE file**. The scope is deliberately minimal. All
+complexity lives in `program.md`. The evaluation metric must be single, scalar, and
+objective (`val_bpb` = validation bits-per-byte).
+
+Shopify CEO Tobi Lutke adapted it immediately and reported **19% improvement** with a
+smaller model that eventually outperformed a larger manually-configured one.
+
+On March 8-9, **35 agents on the Hyperspace network ran 333 experiments in an unattended
+run** — this is the direct link between Karpathy autoresearch and Hyperspace (Upgrade 7).
+
+### Alignment to Your Codebase
+
+**Perfect alignment targets:**
+
+- `agents/evolution/autoresearch.py` → Your `AutoResearchRunner` already has the
+  `score_fn`, `base_params`, `policy`, and keep/discard loop. The `AutoResearchPolicy`
+  dataclass with `max_runtime_minutes`, `max_experiments`, `generations_per_experiment`
+  is *exactly* Karpathy’s time-boxed experiment budget pattern.
+- `agents/evolution/program.md` → You already have this file! The pattern is native to
+  your codebase — Karpathy independently converged on it.
+- `agents/evolution/deap_nightly.py` → Your `NightlyOptimizer` is the scoring harness.
+  In the Karpathy pattern, this becomes the “5-minute training run” equivalent.
+- `agents/backtest/gates.py` → Your gate pipeline IS the `val_bpb` equivalent: a
+  single pipeline run with a clear pass/fail + scalar score output.
+
+**Your gap vs. Karpathy**: He edits *code*. You only mutate *params*. The upgrade to
+code-level editing is the real delta. Your `AutoResearchRunner` mutates `base_params`
+dict via `NightlyOptimizer`. Karpathy’s agent mutates `train.py` source code.
+
+### What It Genuinely Adds
+
+- **Architecture discovery, not just hyperparameter tuning**: Parameter mutation finds
+  local optima. Code mutation finds structural changes — new indicators, different entry
+  logic, alternative risk rules. These are different points in the search space.
+- **Self-healing strategies**: When a strategy degrades in live trading, the code-edit loop
+  can autonomously explore repairs overnight, feeding failure context from your
+  `FailureLedger` as `failure_hint` to the LLM.
+- **Failure-driven specialization**: Your `agents/evolution/retirement.py` handles
+  strategy retirement. Karpathy’s loop adds a *pre-retirement repair pass* — before
+  retiring, attempt n code-edit experiments targeting the specific failure mode.
+
+### Risks & Honest Assessment
+
+- **The single-file constraint is load-bearing**: Karpathy’s approach works BECAUSE
+  train.py is 630 lines and fully fits in an LLM context window. Your strategy files
+  may be longer. Enforce a **hard line limit** (e.g., 800 lines) on strategy files
+  eligible for code-edit evolution.
+- **Syntax errors are common**: The agent will produce broken Python regularly.
+  `ast.parse()` syntax checking (already in the roadmap) is non-negotiable, but you
+  also need `py_compile` + your existing `gate_1_syntax_check` to catch import errors.
+- **program.md quality determines everything**: Karpathy notes that “complexity lives
+  in the Markdown prompt, not the infrastructure.” Your `agents/evolution/program.md`
+  must be obsessively maintained. This is the highest-leverage human-editable artifact.
+- **Git-based rollback is missing**: Karpathy tracks every experiment via git commit on
+  a feature branch. Your `AutoResearchRunner` should create a git branch per session
+  and commit each kept winner — enabling complete audit trail and revert capability.
+
+### Tighter Integration (Roadmap Missed This)
+
+The roadmap missed that Karpathy’s pattern integrates with your **existing** `FailureLedger`:
+
+```python
+# agents/evolution/autoresearch.py addition
+from cryptoswarms.failure_ledger import FailureLedger
+
+# Pull failure context from FailureLedger to seed the LLM's failure_hint
+def build_failure_hint_from_ledger(
+    ledger: FailureLedger,
+    strategy_id: str,
+    max_entries: int = 3,
+) -> str | None:
+    recent = ledger.get_recent(strategy_id, limit=max_entries)
+    if not recent:
+        return None
+    lines = [f"- {e.gate_name}: {e.reason}" for e in recent]
+    return "Recent failure history:\n" + "\n".join(lines)
+
+# This makes the LLM's code mutations TARGET known failure modes,
+# not random exploration — much faster convergence.
+```
+
+-----
+
+-----
+
+## UPGRADE 3 — Senpi AI
+
+### What It Actually Is
+
+Senpi launched April 2025, raised $4.5M seed (Lemniscap + Coinbase Ventures) September 2025,
+has been live since January 2026, and has powered **$185M+ in trading volume with 88% from
+autonomous agents**. It achieved a **40% win rate** in the past 30 days vs. ~20% ecosystem
+average on Hyperliquid, per HyperTracker.
+
+**Concrete capabilities (primary source: senpi.ai):**
+
+- **44 purpose-built tools across 9 categories** — not a generic API wrapper but
+  “decision-ready intelligence” computed on top of raw data.
+- **Smart Money Concentration scanner**: Tracks top-50 markets every 60 seconds.
+  Detects assets *climbing the profit concentration ranks* — not just current leaders but
+  emerging movers. Has quality filters to prevent false signals from erratic rank histories,
+  thin trader pools, and low-leverage instruments.
+- **Hyperfeed**: Real-time 4-hour rolling window. Detects momentum threshold events by tier:
+  Tier 1 ($2M+), Tier 2 ($5.5M+), Tier 3 ($10M+). Refreshes every 2 seconds.
+- **Trader Discovery Engine**: Ranks ALL Hyperliquid perpetual traders by ROI, PnL, win
+  rate, drawdown, gain-to-pain ratio across 4 time windows. Behavioral tags: activity
+  style, consistency score, risk profile.
+- **Skills system** (`senpi-ai/senpi-skills` GitHub repo): Open-source SKILL.md format.
+  Available skills: `dsl-dynamic-stop-loss`, `dsl-tight`, `opportunity-scanner`,
+  `autonomous-trading`, `emerging-movers`, `whale-index`, `wolf-strategy`, `wolf-howl`.
+- **OpenClaw** integration: The execution agent framework that connects Senpi tools to
+  the broader agent ecosystem.
+
+The **DSL** in the codebase is directly from Senpi’s `dsl-dynamic-stop-loss` skill:
+2-phase trailing stop with per-tier ROE-based triggers.
+
+### Alignment to Your Codebase
+
+**Perfect alignment targets:**
+
+- `agents/execution/skill_hub_clients.py` → `HyperliquidSkillHubClient` is your current
+  Hyperliquid execution wrapper. Senpi’s skill system is a *superset* of what you’ve built —
+  it adds the intelligence layer (smart money scoring, behavioral tags) on top of the raw
+  execution layer you already have.
+- `agents/research/skill_hub.py` → Your skill hub already exists! Senpi’s `senpi-skills`
+  repo is directly compatible with your skill loading pattern.
+- `agents/backtest/gates.py` → `gate_6_correlation_check` currently checks strategy
+  correlation against *your own* active strategies. Senpi’s Trader Discovery Engine lets
+  you check correlation against the *entire Hyperliquid smart-money universe*.
+- `agents/execution/execution_agent.py` → Existing `OrderRequest` with `stop_loss`/
+  `take_profit` floats is what the DSL replaces.
+
+**The roadmap’s “Sentinel inverted scanner” concept maps to**: Senpi’s Smart Money
+Concentration scanner running in *inverse* mode — scanning for assets that smart money
+is *exiting* (rank declining with increasing velocity) rather than entering.
+
+### What It Genuinely Adds
+
+- **Behavioral classification of counterparties**: Your current system knows your own
+  strategies’ performance. Senpi adds a picture of *who you’re trading against* —
+  classifying the overall Hyperliquid market population and detecting when momentum
+  traders dominate vs. mean-reverters.
+- **Real smart-money flow, not proxies**: Your `onchain_connector.py` reads raw on-chain
+  data. Senpi pre-computes behavioral labels and consistency scores — saving you the
+  signal engineering work.
+- **2-second data refresh for execution timing**: Your gates are backtesting gates.
+  Senpi’s Hyperfeed adds a *live execution timing layer* — don’t enter a trade when Tier 2+
+  momentum events are in progress for a competing instrument.
+
+### Risks & Honest Assessment
+
+- **Senpi is a product, not just an API**: The MCP toolkit is available but requires a
+  Senpi account and deployment. The roadmap treats it as a generic HTTP endpoint but the
+  actual integration path is through Senpi’s OpenClaw framework or their MCP server.
+- **40% win rate is overall platform, not strategy-specific**: Don’t assume integration
+  will immediately boost your win rate by 20%+ — this is a baseline metric across all
+  Senpi users including copy-trading.
+- **DSL skill files are the real value**: The open-source `senpi-skills` repo is
+  immediately usable and has zero integration friction. Start here. Install `dsl-dynamic-stop-loss`
+  into your `agents/evolution/program.md` as a resident skill.
+
+### Tighter Integration (Roadmap Missed This)
+
+The roadmap missed that **Senpi’s skills use the exact SKILL.md format** — the same format
+your `agents/evolution/program.md` and the stack profiles reference. You don’t need to
+build a `SenpiSkillLoader` class. You load the `SKILL.md` directly:
+
+```python
+# agents/research/skill_factory.py — use existing SkillFactory
+# Just fetch from Senpi's open GitHub repo:
+SENPI_SKILLS_BASE = "https://raw.githubusercontent.com/Senpi-ai/senpi-skills/main"
+
+SENPI_SKILL_URLS = {
+    "dsl_dynamic_stop": f"{SENPI_SKILLS_BASE}/dsl-dynamic-stop-loss/SKILL.md",
+    "emerging_movers":  f"{SENPI_SKILLS_BASE}/emerging-movers/SKILL.md",
+    "whale_index":      f"{SENPI_SKILLS_BASE}/whale-index/SKILL.md",
+    "wolf_strategy":    f"{SENPI_SKILLS_BASE}/wolf-strategy/SKILL.md",
+}
+# Your existing SkillFactory already handles SKILL.md loading.
+# No new class needed — plug in the URLs.
+```
+
+-----
+
+-----
+
+## UPGRADE 4 — BkDplx Pair Scanner
+
+### What It Actually Is
+
+Honest finding: **BkDplx is not a publicly documented product** in the way MiroFish,
+Senpi, Karpathy autoresearch, Chub, and Hyperspace are. There is no GitHub repo, no
+funding announcement, no primary-source documentation that this report could find as of
+March 18, 2026.
+
+However, the **concept is real and well-grounded in academic research**. A January 2026
+arXiv paper (2602.00776, “Explainable Patterns in Cryptocurrency Microstructure”) documents
+exactly this class of approach: using order book + tape features to classify market
+microstructure states, with stable cross-asset predictive patterns across BTC, LTC, ETC,
+ENJ, ROSE on Binance Futures perpetuals at 1-second frequency.
+
+The 10 “behavioral recipes” concept maps to documented microstructure phenomena:
+
+- **Trend Align** → Order flow imbalance in direction of trend
+- **Exhaustion** → Spread widening + volume spike with price stall
+- **Absorption** → Large hidden bid/ask absorbing opposing flow
+- **Vacuum** → Sudden absence of bids/asks on one side (iceberg depletion)
+- **Trap** → False breakout above/below key level with rapid reversal
+- **Structural Divergence** → Price higher/lower highs diverging from OFI
+- **Shock** → Single large market order sweeping depth
+- **Drift** → Sustained one-sided small order flow without acceleration
+- **Compression** → Decreasing spread + decreasing volume (coiling)
+- **Conflict** → Simultaneous large bids and asks (adversarial positioning)
+
+### Alignment to Your Codebase
+
+The most honest alignment: you don’t need an external “BkDplx” service. The microstructure
+classification functionality maps directly to patterns you can derive from data already in
+your stack:
+
+- `agents/backtest/adapters.py` → `DefaultRegimeTagger` is exactly where microstructure
+  classification belongs.
+- `agents/research/onchain_connector.py` → Already fetches on-chain trade data; adding
+  order book depth is a natural extension for Hyperliquid (which exposes full LOB via API).
+- `agents/backtest/gates.py` → gate_5_regime_evaluation already does regime-segmented eval.
+  Adding a microstructure recipe dimension to regime labeling enriches gate_5 without
+  needing a new gate.
+
+### What It Genuinely Adds
+
+If you build this from the arXiv paper’s approach:
+
+- **CatBoost microstructure classifier** trained on 1-second Binance Futures + Hyperliquid
+  LOB data across 5+ assets → stable cross-asset recipe detection.
+- **SHAP-interpretable signals**: The paper shows that order flow imbalance, spread, and
+  adverse selection features are the dominant predictors — you can compute these from raw
+  Hyperliquid LOB data via the existing `onchain_connector.py`.
+- **Validation on your backtest data**: The paper’s conservative top-of-book taker
+  backtest validates profitability of microstructure-based timing.
+
+### Risks & Honest Assessment
+
+- **BkDplx as described may not exist as a service**: Build the microstructure classifier
+  in-house using the arXiv methodology. This is actually better than a black-box API
+  because you control the model, can retrain it on your specific instruments, and don’t
+  have a vendor dependency.
+- **1-second LOB data volume**: Classifying microstructure properly requires high-frequency
+  data. Your current pipeline is candle-based. Adding LOB + tape data increases pipeline
+  complexity substantially.
+- **Hyperliquid LOB is accessible**: Senpi’s documentation confirms Hyperliquid exposes
+  full order book depth, funding rate history, open interest, and mark/oracle prices with
+  no authentication. You can build your own recipe scanner.
+
+### Tighter Integration (Roadmap Missed This)
+
+Don’t build a service dependency. Build the classifier in-house:
+
+```python
+# agents/scanner/microstructure_classifier.py
+# Based on arXiv 2602.00776 methodology
+# Features: OFI (order flow imbalance), spread, depth imbalance, trade intensity
+# Model: CatBoost with direction-aware GMADL objective
+# Cross-asset: train once on BTC/ETH data, apply to all Hyperliquid perps
+
+# Integration point: your existing onchain_connector.py already fetches the
+# raw data. Add LOB snapshots + extend the feature pipeline.
+# Use your existing MemoryDag to cache recipe state between calls.
+```
+
+-----
+
+-----
+
+## UPGRADE 5 — Context Hub (Chub)
+
+### What It Actually Is
+
+Released March 9, 2026 by Andrew Ng and DeepLearning.AI team. Already 5,700+ stars in 4
+days. CLI: `npm install -g @aisuite/chub`. GitHub: `andrewyng/context-hub`.
+
+**The two problems it solves:**
+
+1. **API hallucination**: Agents use deprecated endpoints, invent parameters, call v1 when
+   v3 exists. Ng’s example: Claude Code using old OpenAI Chat Completions instead of the
+   new Responses API.
+1. **Session knowledge loss**: Agents rediscover the same workarounds every session because
+   they have no persistent memory.
+
+**Architecture:**
+
+- `chub get <api>/<endpoint> --lang py` → fetches curated LLM-optimized Markdown docs
+- `chub annotate` → agent saves workarounds locally; persists across sessions
+- `chub feedback` → agents upvote/downvote docs; feeds back to doc authors
+- Two content types: **Docs** (large, ephemeral, fetched per task) and **Skills** (small,
+  persistent, installed into agent skill directories)
+- Currently covers 68+ APIs with community adding more daily
+
+**Critically:** Context Hub uses the exact same **SKILL.md format** as Karpathy’s
+`program.md` pattern and Senpi’s skills. This is an emerging standard.
+
+### Alignment to Your Codebase
+
+**Extremely high alignment — this was already conceptually present:**
+
+- `agents/orchestration/mcp_registry.py` → MCPRegistry enforces tool-level authorization.
+  Chub is a `low` risk, `side_effects=False` tool — register it as `chub_get_api_doc`
+  and `chub_annotate`.
+- `agents/evolution/program.md` → Is already a `SKILL.md`-compatible file. Add a resident
+  Chub skill here: “Before editing any file that calls an external API, run
+  `chub get <api>/<endpoint> --lang py` and read the output.”
+- `agents/research/skill_factory.py` → Your `SkillFactory` loads `SKILL.md` files.
+  Chub’s skill format is identical — you can add Chub as a learnable skill.
+- `agents/evolution/autoresearch.py` → The `KarpathyAutoResearchRunner.run()` loop should
+  call `chub get` before every code-edit experiment, as the roadmap specified. But the
+  simpler implementation is just embedding it in `program.md` as an instruction.
+
+### What It Genuinely Adds
+
+This is the **most immediately deployable** of all seven upgrades with the clearest ROI:
+
+- Zero infrastructure overhead (it’s a CLI tool, not a service)
+- Directly prevents the most common failure mode in agentic code generation
+- The annotation loop means your agents compound knowledge over time without retraining
+- The community feedback loop means the docs improve as usage grows
+
+For CryptoSwarms specifically: Jesse, vectorbt, Hyperliquid, Binance, and OKX all have
+APIs that evolve. Your `KarpathyAutoResearchRunner` will hallucinate deprecated Jesse
+strategy base classes, wrong vectorbt portfolio constructors, and stale Hyperliquid
+endpoint paths without Chub grounding every edit.
+
+### Risks & Honest Assessment
+
+- **Minimal risk**: This is genuinely a low-risk, high-reward integration. The only risk
+  is that Chub’s curated docs don’t yet cover Jesse or vectorbt (likely true for now —
+  these are niche). The fix: contribute your own Jesse and vectorbt docs to the repo.
+- **Not for live trading decisions**: Chub is for code generation quality. It doesn’t
+  affect runtime trading logic. Keep the scope narrow.
+
+### Tighter Integration (Roadmap Missed This)
+
+The roadmap built a complex `ChubClient` Python class. The actual tool is a CLI.
+The right integration is much simpler — just expose it as a subprocess call:
+
+```python
+# agents/evolution/chub_tool.py — 15 lines, not 80
+import subprocess
+
+def chub_get(api: str, endpoint: str, lang: str = "py") -> str:
+    """Fetch Chub docs for a given API endpoint. Returns Markdown string."""
+    result = subprocess.run(
+        ["chub", "get", f"{api}/{endpoint}", "--lang", lang],
+        capture_output=True, text=True, timeout=10,
+    )
+    return result.stdout if result.returncode == 0 else ""
+
+def chub_annotate(api: str, endpoint: str, note: str) -> None:
+    """Persist a workaround note for an API endpoint."""
+    subprocess.run(
+        ["chub", "annotate", f"{api}/{endpoint}", note],
+        capture_output=True, timeout=5,
+    )
+```
+
+Add to `program.md` as a resident skill. No Docker service needed. No `ChubClient` class.
+No MCPRegistry changes needed for Phase 0.
+
+-----
+
+-----
+
+## UPGRADE 6 — ORMR Boros / Funding-Rate Arbitrage
+
+### What It Actually Is
+
+This requires disambiguation. **Two things are being conflated under “ORMR Boros”:**
+
+**Pendle Boros** (confirmed real): Pendle Finance’s yield trading platform. Boros is the
+“world’s largest crypto yield trading platform” per pendle.finance/boros. It focuses on
+tokenized yield — fixed vs. variable rate swaps on DeFi yields.
+
+**Funding-rate arbitrage** (confirmed real, widespread): Delta-neutral positions capturing
+the periodic funding payments in perpetual futures markets. When funding is positive, shorts
+collect payments from longs; when negative, longs collect from shorts. The bot goes
+long spot + short perp (or vice versa) and collects the differential.
+
+**Synth AI**: No primary source confirming a “Synth AI” product that predicts funding rate
+flips as described in the roadmap. The concept of ML-predicted funding rate trajectories
+is real and academically documented but “Synth AI” as a specific product was not found.
+
+**What IS real and deployable today:**
+
+- Hyperliquid exposes full funding rate history and open interest via API with no auth
+- Funding rates on Hyperliquid are 1-hour intervals (vs. 8-hour on Binance)
+- Historical funding rate data is sufficient to build an ML predictor in-house
+- The execution layer (spot + perp hedge) is fully supported by your existing
+  `HyperliquidSkillHubClient` and `BinanceSkillHubClient`
+
+### Alignment to Your Codebase
+
+- `agents/research/onchain_connector.py` → Already fetches on-chain data. Add funding rate
+  history endpoint calls here. Hyperliquid exposes this without authentication.
+- `agents/backtest/adapters.py` → `TimescaleActiveReturnsProvider` already tracks strategy
+  returns. Add a `FundingRateHistoryProvider` alongside it.
+- `agents/execution/skill_hub_clients.py` → `HyperliquidSkillHubClient.place_bracket_order()`
+  already exists. Delta-neutral yield trades require TWO coordinated orders — add
+  `place_delta_neutral_yield_trade(long_intent, short_intent)`.
+- `agents/backtest/gates.py` → A funding-rate gate makes sense for funding_arb strategy
+  type specifically. But for directional strategies (your current core), it’s advisory at
+  best.
+
+### What It Genuinely Adds
+
+- **Market-neutral yield**: Funding arbitrage doesn’t depend on price direction. It’s
+  genuinely orthogonal alpha to your existing directional strategies — ideal portfolio
+  diversification within your `gate_6_correlation_check` framework.
+- **Quantifiable carry**: Hyperliquid 1-hour funding rates are measurable, historical,
+  and predictable. A simple autoregressive model (AR(12) on 1-hour funding data) predicts
+  flip timing with meaningful accuracy — no external “Synth AI” service needed.
+- **Integration with your `FailureLedger`**: When a directional strategy gets stopped out,
+  funding arb can generate returns during the “dead period” — automatic capital redeployment.
+
+### Risks & Honest Assessment
+
+- **Execution risk is high**: Delta-neutral requires TWO simultaneous fills. Leg risk
+  (one leg fills, other doesn’t) can create unintended directional exposure.
+- **Funding rate competition**: Funding arb is crowded. When funding rates are extremely
+  positive, everyone shorts perps — which pushes funding rates back toward zero.
+- **“ORMR” and “Synth AI” as services**: Build the prediction layer in-house from
+  Hyperliquid’s free data rather than depending on unconfirmed external APIs.
+
+### Tighter Integration (Roadmap Missed This)
+
+Your `onchain_connector.py` already has the data access pattern. Extend it:
+
+```python
+# agents/research/funding_rate_connector.py
+# Uses Hyperliquid's free, no-auth API
+# Builds AR(12) funding rate predictor in-house
+# No "Synth AI" vendor dependency needed
+
+HYPERLIQUID_API = "https://api.hyperliquid.xyz/info"
+
+def fetch_funding_history(symbol: str, lookback_hours: int = 168) -> list[float]:
+    """Fetch 1-hour funding rates from Hyperliquid. No API key required."""
+    ...
+
+def predict_funding_flip(history: list[float]) -> tuple[float, int | None]:
+    """AR(12) model predicting next funding rate and flip timing.
+    Returns (predicted_rate_bps, flip_in_periods | None)."""
+    ...
+```
+
+-----
+
+-----
+
+## UPGRADE 7 — HyperspaceAI Prometheus
+
+### What It Actually Is
+
+HyperspaceAI is **the world’s largest decentralized P2P AI inference network** — 2M+ nodes,
+3.6M+ downloads. The network uses GossipSub for message propagation, CRDT (Conflict-free
+Replicated Data Types via Loro) for leaderboard state, and DiLoCo for collaborative model
+training across nodes.
+
+**AgentRank** (confirmed real paper, agentrank.hyper.space): Adapts PageRank to autonomous
+AI agents. Key insight: *every endorsement requires cryptographically verified computation*.
+Unlike Google’s PageRank where anyone can add a hyperlink, AgentRank requires sustained
+real computation to accumulate endorsement weight. This makes Sybil attacks economically
+costly. The paper models this as a “random task delegator” — agents accumulate rank by
+being chosen for real work.
+
+**`hyperspaceai/agi` GitHub repo** (the trading-relevant piece): A distributed AGI system
+where thousands of autonomous agents collaboratively run experiments, share via P2P gossip,
+and push results to GitHub. It explicitly has a **finance CRDT leaderboard** tracking Sharpe
+ratio as the optimization metric. It already runs Karpathy-autoresearch-inspired agents
+across the mesh. On March 8-9, 35 agents ran 333 experiments overnight on the finance
+leaderboard.
+
+**Architecture for the finance use case:**
+
+- 5 CRDT Leaderboards: research (val_loss), search (NDCG@10), **finance (Sharpe ratio)**,
+  skills (adoption score), causes
+- 5 GossipSub topics: one per leaderboard + one for experiments
+- DiLoCo: local training for H steps → compressed weight delta sharing
+- Hourly JSON snapshots of full leaderboard state on GitHub
+
+### Alignment to Your Codebase
+
+**Deepest, most transformative alignment:**
+
+- `cryptoswarms/memory_dag.py` → `MemoryDag` + `MemoryDagEdge` maps directly to
+  GossipSub message propagation. Your content-addressed node IDs (SHA1 hashes) are
+  compatible with CRDT merge semantics — different nodes generating the same memory
+  content produce the same node_id.
+- `agents/orchestration/runtime_middleware.py` → `RuntimeOrchestrator` is the local
+  execution harness. Adding a `HyperspaceGossipMiddleware` at the end of the chain
+  is exactly as the roadmap describes — broadcast each checkpoint to the mesh.
+- `agents/evolution/autoresearch.py` → Your `AutoResearchRunner` + Karpathy code-edit
+  loop becomes a first-class Hyperspace agent. Each kept winner gossips its params +
+  score to the finance CRDT leaderboard. Every CryptoSwarms node globally converges
+  on the best strategies.
+- `agents/backtest/gates.py` → Gate scores (Sharpe, WFE, sensitivity ratio) are exactly
+  the metrics the finance leaderboard tracks. Your `ValidationSummary.gate_results` maps
+  directly to the leaderboard’s experiment record format.
+
+**The part that’s NOT in the roadmap**: The `hyperspaceai/agi` finance leaderboard is
+**already running**. You can JOIN the existing network and benefit from the 333+
+experiments already conducted, rather than building from scratch.
+
+### What It Genuinely Adds
+
+- **Global strategy gene pool**: Every CryptoSwarms node benefits from every other node’s
+  overnight research. A node running on different market data or different instruments
+  discovers strategies that your local node wouldn’t find alone.
+- **Sybil-resistant consensus**: AgentRank ensures that only nodes with real computational
+  stake (proven by work history) influence which strategies get globally promoted. This
+  prevents low-effort nodes from gaming your gate_9.
+- **Censorship-resistant operation**: 2M+ node network. No single point of failure. Your
+  trading intelligence continues running even if cloud providers have outages.
+- **DiLoCo for shared strategy models**: If you build ML-based predictors (e.g., the
+  microstructure classifier from Upgrade 4, or the funding rate predictor from Upgrade 6),
+  DiLoCo lets multiple nodes collaboratively improve these models without sharing raw data.
+
+### Risks & Honest Assessment
+
+- **Week 4-6 is aggressive for full P2P deployment**: The core gossip integration can be
+  done in a week. Full AgentRank governance + DiLoCo collaborative training is a
+  months-long project.
+- **Finance leaderboard data is raw and unvalidated**: The network snapshots include a
+  disclaimer that data is “raw and unvalidated.” Don’t use the leaderboard consensus as
+  a direct trading signal — use it as a research signal to inform which strategies your
+  local `ValidationPipeline` should prioritize.
+- **P2P security model**: Broadcasting strategy parameters (even without source code) to
+  a public P2P network has alpha-leakage implications. Consider gossipping only aggregate
+  metrics (Sharpe, WFE, gate scores) — not raw strategy parameters.
+
+### Tighter Integration (Roadmap Missed This)
+
+You can join the existing network TODAY:
+
+```bash
+# Install the CLI
+npm install -g @hyperspaceai/aios-cli
+
+# Join the finance leaderboard research project
+hyperspace start --profile inference
+hyperspace join finance  # connects to the Sharpe-ratio optimization leaderboard
+
+# Your AutoResearchRunner results can be pushed immediately:
+hyperspace submit --project finance --score <sharpe> --params <params.json>
+```
+
+No Docker service needed for Phase 0. The existing network handles the infrastructure.
+Build the full Docker service in Phase 4 as the roadmap specifies.
+
+-----
+
+-----
+
+## Cross-Cutting Concepts the Roadmap Missed
+
+### 1. CRDT-based MemoryDag
+
+Your `MemoryDag` uses content-addressed SHA1 node IDs. This is 80% of the way to being
+a **CRDT (Conflict-free Replicated Data Type)**. The missing piece: nodes from different
+CryptoSwarms instances with the same content should *merge automatically* without conflicts.
+Hyperspace uses Loro for this. Add merge semantics to MemoryDag and you get
+gossip-based distributed memory for free.
+
+### 2. The SKILL.md Convergence
+
+Three of the seven upgrades (Karpathy `program.md`, Senpi skills, Chub docs+skills) all
+use the **SKILL.md format**. This is an emerging standard for agent behavioral
+instructions. Your `agents/evolution/program.md` already uses this format. The highest-
+leverage move: build a unified **CryptoSwarms Skill Registry** where:
+
+- Senpi trading skills are loaded as first-class skills
+- Chub API docs are loaded as ephemeral context skills
+- Your own backtest-validated strategy patterns are encoded as skills
+- The `KarpathyAutoResearchRunner` can discover and apply skills autonomously
+
+### 3. The Karpathy-Hyperspace Direct Link
+
+The Hyperspace network ran Karpathy-autoresearch experiments on March 8-9 (333 experiments,
+35 agents). This is not a coincidence — it’s the intended architecture. Your
+`AutoResearchRunner` IS a Hyperspace agent in the `hyperspaceai/agi` finance domain.
+The loop is: local autoresearch → gossip winners to mesh → other nodes validate and
+build on them → global convergence. Wire this first.
+
+### 4. GraphRAG for MemoryDag
+
+MiroFish uses GraphRAG (Graph Retrieval-Augmented Generation) to extract entities and
+relationships from seed data. Your `MemoryDag` already stores entities (nodes) and
+relationships (edges). Adding GraphRAG-style entity extraction to your
+`dag_memory_bridge.py` would let you: (1) ingest news/research docs into the DAG as
+structured knowledge graphs, and (2) use graph traversal (your existing `DagWalker`)
+for multi-hop reasoning across connected knowledge.
+
+This is what MiroFish’s “World Construction” stage does — and you already have the
+data structure for it.
+
+### 5. The FailureLedger as a Negative-Selection Signal
+
+Your `cryptoswarms/failure_ledger.py` tracks what failed. None of the seven upgrades
+directly use it as a training signal for the LLM code editor. But it should be the
+**primary input** to `program.md` refinement:
+
+- Gate failures → which aspects of the strategy need architectural change
+- Execution failures → which market conditions to avoid
+- Retirement triggers → what decay patterns to detect earlier
+
+This is the missing feedback loop between your validation pipeline and your evolution system.
+
+-----
+
+-----
+
+## Priority Matrix: What to Build First
+
+|Upgrade                      |Integration Effort|Real Value     |Risk           |Start Here      |
+|-----------------------------|------------------|---------------|---------------|----------------|
+|**Chub**                     |★☆☆☆☆ Very Low    |★★★★☆ High     |★☆☆☆☆ Very Low |**YES — Day 1** |
+|**Senpi skills**             |★☆☆☆☆ Very Low    |★★★★☆ High     |★★☆☆☆ Low      |**YES — Day 1** |
+|**Karpathy code edit**       |★★★☆☆ Medium      |★★★★★ Very High|★★★☆☆ Medium   |**YES — Week 1**|
+|**Funding arb (in-house)**   |★★☆☆☆ Low         |★★★★☆ High     |★★★☆☆ Medium   |YES — Week 2    |
+|**Hyperspace (join)**        |★★☆☆☆ Low         |★★★★★ Very High|★★☆☆☆ Low      |YES — Week 2    |
+|**MiroFish (Bayes prior)**   |★★★☆☆ Medium      |★★★☆☆ Medium   |★★★★☆ High (v0)|Week 3          |
+|**Microstructure (in-house)**|★★★★☆ High        |★★★★☆ High     |★★☆☆☆ Low      |Week 4+         |
+|**Hyperspace (full P2P)**    |★★★★★ Very High   |★★★★★ Very High|★★★☆☆ Medium   |Week 5+         |
+
+-----
+
+## Summary: What Changes in the Roadmap
+
+|#|Item                   |Roadmap Said                    |Research Says                                                                                                                                                      |
+|-|-----------------------|--------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|1|MiroFish REST API      |Call `/simulate` endpoint       |No such endpoint; wrap Python engine or use as sidecar. Feed output into your existing Bayesian chain, not just a gate.                                            |
+|2|Karpathy code edit     |Build new runner class          |Your `AutoResearchRunner` is already ~70% aligned. The key additions: git-branch tracking, FailureLedger as failure_hint source, `program.md` as the primary lever.|
+|3|Senpi API              |Build `SenpiHyperfeedConnector` |Use Senpi’s open-source SKILL.md files directly. No new connector class needed for skills. MCP toolkit handles the API layer.                                      |
+|4|BkDplx service         |Call external `/scan` API       |No confirmed product. Build from arXiv 2602.00776 methodology in-house using Hyperliquid’s free LOB data.                                                          |
+|5|Chub Python class      |Build `ChubClient` with 80 lines|15-line subprocess wrapper + resident skill in `program.md`. No Python class or Docker service needed.                                                             |
+|6|ORMR + Synth AI        |Call external prediction APIs   |No confirmed “Synth AI” product. Build AR(12) funding predictor from Hyperliquid’s free historical data. Pendle Boros is real but different scope.                 |
+|7|Hyperspace from scratch|Build full Docker P2P mesh      |The finance leaderboard is ALREADY RUNNING. Join the existing network immediately; save full P2P deployment for Phase 4.                                           |
+
+-----
+
+*All research grounded in primary sources: GitHub repositories, official product pages,
+academic papers (arXiv), and product launch announcements, all from March 2026.*
+*No vendor claims are taken at face value without corroborating primary sources.*

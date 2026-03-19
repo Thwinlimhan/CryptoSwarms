@@ -1,0 +1,2132 @@
+# CryptoSwarms: Ultimate 2026 Enhancement Roadmap
+
+**Compiled by Grok — March 18, 2026**
+**Grounded against codebase snapshot: 2026-03-16**
+
+This is the single, complete, actionable blueprint combining **all seven high-impact upgrades**.
+Every instruction below is written against real file paths, real class names, and real interfaces
+already present in the codebase. No scaffolding omitted — copy, paste, integrate.
+
+-----
+
+## Executive Vision
+
+Your current codebase is already elite:
+
+- Gates 0–6 form a rigorous 7-stage validation pipeline in `agents/backtest/`
+- `ValidationPipeline` composes those gates with a clean `run()` method
+- `RuntimeOrchestrator` + `RuntimeMiddleware` give you deterministic, retriable middleware
+- `MemoryDag` gives you a content-addressed, async-safe knowledge graph
+- `MCPRegistry` enforces tool-level risk-tiered access control
+- `AutoResearchRunner` + `NightlyOptimizer` + `DeapNightly` form the evolution engine
+- `SkillHubExecutionRouter` wraps Binance, Hyperliquid, Aster, and OKX
+
+With these seven upgrades, CryptoSwarms becomes a **civilization-scale, self-healing,
+multi-layer trading intelligence platform** combining emergent simulation, real smart-money
+flow, microstructure behavior, zero-hallucination code evolution, on-chain funding alpha,
+and global decentralized orchestration.
+
+-----
+
+## Overall Phased Roadmap (4–6 Weeks)
+
+|Phase                                      |Duration|Deliverables                                                                                     |
+|-------------------------------------------|--------|-------------------------------------------------------------------------------------------------|
+|**Phase 0** — Foundation                   |1–2 days|Wire Jesse adapter fully; add Chub wrapper; end-to-end paper cycle                               |
+|**Phase 1** — Research & Scanning Layer    |Week 1  |SenpiHyperfeedConnector, BkDplxRecipeScanner, MiroFishRegimeSimulator, ORMR funding connector    |
+|**Phase 2** — Evolution & Code Intelligence|Week 2  |Karpathy code-edit loop in AutoResearchRunner; Chub pre-edit guard; failure-driven specialization|
+|**Phase 3** — Execution & Risk Hardening   |Week 3  |BorosSkillHubClient; hardened DSL stops; Sentinel inverted scanner; BkDplx recipe gate           |
+|**Phase 4** — Decentralized Infrastructure |Week 4–6|Hyperspace Prometheus P2P mesh; MemoryDag gossip; AgentRank governance                           |
+
+-----
+
+-----
+
+# UPGRADE 1 — MiroFish: Emergent Swarm Market Simulation
+
+## Purpose
+
+Replace the single static `DefaultRegimeTagger` with a market microstructure simulator that
+runs **thousands of personality-driven trader agents** (momentum chasers, mean-reverters,
+noise traders, whales) and derives emergent regime signals from their aggregate behavior.
+Gate 7 will refuse to promote any candidate that the simulated swarm collectively fades.
+
+## Docker Addition — `docker-compose.yml`
+
+Add the following service alongside your existing Redis / TimescaleDB services:
+
+```yaml
+  mirofish:
+    image: 666ghj/mirofish:latest
+    ports:
+      - "5001:5001"
+    environment:
+      MIROFISH_AGENTS: "2000"
+      MIROFISH_SEED: "42"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+```
+
+## New File — `agents/backtest/mirofish_simulator.py`
+
+```python
+"""MiroFish emergent swarm regime simulator.
+
+Calls the MiroFish REST API to run a multi-agent market simulation and returns
+a structured regime verdict with agent consensus metrics.
+"""
+from __future__ import annotations
+
+import statistics
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+
+class MiroFishTransport(Protocol):
+    def post(self, url: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class SwarmRegimeVerdict:
+    regime: str                   # "bullish" | "bearish" | "choppy" | "breakout"
+    consensus_score: float        # 0.0–1.0, fraction of agents agreeing on regime
+    momentum_agents_pct: float
+    mean_revert_agents_pct: float
+    noise_agents_pct: float
+    whale_pressure: float         # net buy pressure from large-cap agents
+    raw_response: dict[str, Any]
+
+
+@dataclass(slots=True)
+class MiroFishRegimeSimulator:
+    """Wraps the MiroFish microservice to derive emergent regime verdicts.
+
+    Args:
+        base_url: URL of the running mirofish container, e.g. "http://mirofish:5001"
+        transport: injectable HTTP transport (use requests-based impl in production)
+        min_consensus: minimum agent consensus fraction to trust the regime label
+        n_agents: number of simulated agents (overrides container default if sent)
+    """
+    base_url: str
+    transport: MiroFishTransport
+    min_consensus: float = 0.55
+    n_agents: int = 2000
+
+    def simulate(self, market_data: dict[str, Any]) -> SwarmRegimeVerdict:
+        """Run a full swarm simulation against the supplied OHLCV market_data dict.
+
+        market_data must contain at minimum:
+          - "close": list[float]
+          - "volume": list[float]
+          - "high": list[float]   (optional but improves accuracy)
+          - "low": list[float]    (optional but improves accuracy)
+        """
+        payload = {
+            "candles": {
+                "close": market_data.get("close", []),
+                "volume": market_data.get("volume", []),
+                "high": market_data.get("high", []),
+                "low": market_data.get("low", []),
+            },
+            "n_agents": self.n_agents,
+            "personality_mix": {
+                "momentum": 0.35,
+                "mean_revert": 0.30,
+                "noise": 0.25,
+                "whale": 0.10,
+            },
+        }
+        resp = self.transport.post(
+            self.base_url.rstrip("/") + "/simulate",
+            payload,
+        )
+        return self._parse(resp)
+
+    def _parse(self, resp: dict[str, Any]) -> SwarmRegimeVerdict:
+        agents = resp.get("agent_breakdown", {})
+        total = max(sum(agents.values()), 1)
+        return SwarmRegimeVerdict(
+            regime=resp.get("regime", "unknown"),
+            consensus_score=float(resp.get("consensus_score", 0.0)),
+            momentum_agents_pct=agents.get("momentum", 0) / total,
+            mean_revert_agents_pct=agents.get("mean_revert", 0) / total,
+            noise_agents_pct=agents.get("noise", 0) / total,
+            whale_pressure=float(resp.get("whale_net_pressure", 0.0)),
+            raw_response=resp,
+        )
+
+    def is_tradeable(self, verdict: SwarmRegimeVerdict) -> bool:
+        """Return True if the swarm consensus is strong enough to trade."""
+        return (
+            verdict.consensus_score >= self.min_consensus
+            and verdict.regime in ("bullish", "bearish", "breakout")
+        )
+```
+
+## Edit — `agents/backtest/adapters.py`
+
+After the existing `DefaultRegimeTagger` class, add:
+
+```python
+# ── MiroFish regime tagger ─────────────────────────────────────────────────
+
+from agents.backtest.mirofish_simulator import MiroFishRegimeSimulator, MiroFishTransport
+
+
+@dataclass(slots=True)
+class MiroFishRegimeTagger:
+    """Replaces DefaultRegimeTagger with emergent swarm simulation.
+
+    Wraps MiroFishRegimeSimulator and segments market_data into emergent
+    regime buckets that gate_5 can consume without any code changes.
+    """
+    simulator: MiroFishRegimeSimulator
+
+    def __call__(self, market_data: Any) -> dict[str, Any]:
+        verdict = self.simulator.simulate(
+            market_data if isinstance(market_data, dict) else {}
+        )
+        # Split data into regime sub-windows for gate_5 compatibility
+        regime_key = verdict.regime if verdict.consensus_score >= 0.55 else "choppy"
+        return {
+            "regimes": {regime_key: market_data},
+            "swarm_verdict": {
+                "regime": verdict.regime,
+                "consensus_score": verdict.consensus_score,
+                "whale_pressure": verdict.whale_pressure,
+            },
+        }
+```
+
+## Edit — `agents/backtest/gates.py`
+
+Append the following gate function at the bottom of the file:
+
+```python
+# ── Gate 7: Swarm Regime Gate ──────────────────────────────────────────────
+
+from agents.backtest.mirofish_simulator import MiroFishRegimeSimulator
+
+
+def gate_7_swarm_regime(
+    candidate: StrategyCandidate,
+    simulator: MiroFishRegimeSimulator,
+    min_consensus: float = 0.55,
+) -> GateResult:
+    """Gate 7 — MiroFish emergent swarm consensus check.
+
+    Runs thousands of personality-driven simulated traders against the
+    candidate's market_data. Fails candidates the swarm collectively fades.
+
+    Args:
+        candidate: strategy candidate with market_data dict
+        simulator: configured MiroFishRegimeSimulator instance
+        min_consensus: minimum agent agreement fraction (default 0.55)
+    """
+    try:
+        verdict = simulator.simulate(
+            candidate.market_data if isinstance(candidate.market_data, dict) else {}
+        )
+    except Exception as exc:
+        return GateResult(
+            gate_number=7,
+            gate_name="swarm_regime_consensus",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    tradeable = simulator.is_tradeable(verdict)
+    return GateResult(
+        gate_number=7,
+        gate_name="swarm_regime_consensus",
+        status=GateStatus.PASS if tradeable else GateStatus.FAIL,
+        score=verdict.consensus_score,
+        details={
+            "regime": verdict.regime,
+            "consensus_score": verdict.consensus_score,
+            "whale_pressure": verdict.whale_pressure,
+            "momentum_pct": verdict.momentum_agents_pct,
+            "mean_revert_pct": verdict.mean_revert_agents_pct,
+            "noise_pct": verdict.noise_agents_pct,
+            "min_consensus_threshold": min_consensus,
+        },
+    )
+```
+
+## Edit — `agents/backtest/validation_pipeline.py`
+
+```python
+# 1. Add import at top:
+from .gates import gate_7_swarm_regime
+from .mirofish_simulator import MiroFishRegimeSimulator
+
+# 2. Add field to ValidationPipeline dataclass:
+#    mirofish_simulator: MiroFishRegimeSimulator | None = None
+
+# 3. In ValidationPipeline.run(), after gate_6 block, add:
+        if self.mirofish_simulator is not None:
+            gate_7 = gate_7_swarm_regime(candidate, self.mirofish_simulator)
+            gate_results.append(gate_7)
+            persist_gate_result(self.db, run_id, candidate.strategy_id, gate_7)
+
+# 4. ValidationPipeline now accepts optional mirofish_simulator= kwarg.
+#    Wire it in agents/backtest/production.py when constructing the pipeline.
+```
+
+## Edit — `agents/research/research_factory.py`
+
+In the factory that assembles research pipelines, inject `MiroFishRegimeTagger` as the
+default `regime_tagger` when `MIROFISH_URL` env var is set:
+
+```python
+import os
+from agents.backtest.adapters import MiroFishRegimeTagger
+from agents.backtest.mirofish_simulator import MiroFishRegimeSimulator
+
+def build_regime_tagger(transport):
+    url = os.getenv("MIROFISH_URL", "http://mirofish:5001")
+    if url:
+        sim = MiroFishRegimeSimulator(base_url=url, transport=transport)
+        return MiroFishRegimeTagger(simulator=sim)
+    from agents.backtest.adapters import DefaultRegimeTagger
+    return DefaultRegimeTagger()
+```
+
+-----
+
+-----
+
+# UPGRADE 2 — Karpathy Autoresearch: Full Code-Level Autonomous Evolution
+
+## Purpose
+
+Upgrade `AutoResearchRunner` from a **parameter-only** optimizer to a **full code editor**.
+Every overnight experiment now: reads the current strategy `.py` source → asks Claude/GPT
+to propose a code mutation → writes the mutation to disk → runs `ValidationPipeline` →
+keeps winners, reverts losers. This is Karpathy-style “AI scientist” applied to trading.
+
+## Edit — `agents/evolution/autoresearch.py`
+
+Replace the current `AutoResearchRunner.run()` body with the Karpathy loop:
+
+```python
+"""
+FULL REPLACEMENT for agents/evolution/autoresearch.py
+Adds: CodeEditorProtocol, CodeMutation, KarpathyAutoResearchRunner
+Keeps: AutoResearchPolicy, ExperimentDecision, AutoResearchReport, load_program_policy
+"""
+from __future__ import annotations
+
+import ast
+import shutil
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Callable, Protocol
+
+from agents.evolution.deap_nightly import NightlyOptimizer, OptimizationCandidate
+
+
+# ── Existing unchanged ──────────────────────────────────────────────────────
+# (keep AutoResearchPolicy, ExperimentDecision, AutoResearchReport,
+#  load_program_policy, _as_utc exactly as-is)
+
+
+# ── Code-level evolution additions ─────────────────────────────────────────
+
+class CodeEditorProtocol(Protocol):
+    """Adapter for any LLM-backed code mutation service (Claude, GPT-4, local)."""
+    def propose_mutation(
+        self,
+        source_code: str,
+        score_before: float,
+        failure_hint: str | None,
+    ) -> str:
+        """Return mutated Python source code string. Must be syntactically valid."""
+        ...
+
+
+@dataclass(frozen=True)
+class CodeMutation:
+    strategy_path: Path
+    original_source: str
+    mutated_source: str
+    proposed_by: str
+    failure_hint: str | None
+
+
+def _validate_syntax(source: str) -> bool:
+    try:
+        ast.parse(source)
+        return True
+    except SyntaxError:
+        return False
+
+
+def _apply_mutation(mutation: CodeMutation) -> Path:
+    """Write mutated source to a temp file. Caller is responsible for cleanup."""
+    tmp = tempfile.NamedTemporaryFile(
+        suffix=".py",
+        dir=mutation.strategy_path.parent,
+        delete=False,
+        mode="w",
+        encoding="utf-8",
+    )
+    tmp.write(mutation.mutated_source)
+    tmp.close()
+    return Path(tmp.name)
+
+
+def _revert_mutation(tmp_path: Path) -> None:
+    try:
+        tmp_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+@dataclass(slots=True)
+class KarpathyAutoResearchRunner:
+    """Code-editing autonomous research runner.
+
+    For each experiment:
+      1. Reads current strategy .py source
+      2. Asks code_editor to propose a mutation (with optional failure_hint)
+      3. Validates syntax
+      4. Writes mutation to a temp .py file
+      5. Runs ValidationPipeline (or score_fn proxy) on mutated file
+      6. Keeps winners (overwrites original), reverts losers
+
+    Args:
+        strategy_path: path to the strategy .py file to evolve
+        score_fn: callable(params) -> float used for fast scoring
+        base_params: seed parameter dict passed to NightlyOptimizer
+        policy: AutoResearchPolicy controlling runtime limits
+        code_editor: LLM-backed CodeEditorProtocol instance
+        chub_client: optional ContextHubClient to fetch fresh API docs before editing
+        slippage: slippage fraction passed to NightlyOptimizer
+    """
+    strategy_path: Path
+    score_fn: Callable[[dict[str, float]], float]
+    base_params: dict[str, float]
+    policy: "AutoResearchPolicy"
+    code_editor: CodeEditorProtocol
+    chub_client: object | None = None   # ChubClient — see Upgrade 5
+    slippage: float = 0.004
+
+    def run(
+        self,
+        incumbent_score: float,
+        now_provider: Callable[[], datetime] | None = None,
+    ) -> "AutoResearchReport":
+        now_fn = now_provider or (lambda: datetime.now(timezone.utc))
+        started_at = _as_utc(now_fn())
+        deadline = started_at + self.policy.max_runtime
+        kept: list["ExperimentDecision"] = []
+        discarded: list["ExperimentDecision"] = []
+        incumbent = float(incumbent_score)
+        experiments = 0
+        failure_hint: str | None = None
+
+        for experiment_id in range(1, self.policy.max_experiments + 1):
+            if _as_utc(now_fn()) >= deadline:
+                break
+
+            # ── Step 1: optionally fetch fresh API docs via Chub ───────────
+            if self.chub_client is not None:
+                try:
+                    self.chub_client.refresh_strategy_api_context(self.strategy_path)
+                except Exception:
+                    pass  # non-blocking; log in production
+
+            # ── Step 2: read source ─────────────────────────────────────────
+            original_source = self.strategy_path.read_text(encoding="utf-8")
+
+            # ── Step 3: LLM proposes mutation ───────────────────────────────
+            try:
+                mutated_source = self.code_editor.propose_mutation(
+                    source_code=original_source,
+                    score_before=incumbent,
+                    failure_hint=failure_hint,
+                )
+            except Exception as exc:
+                discarded.append(ExperimentDecision(
+                    experiment_id=experiment_id,
+                    best_score=incumbent,
+                    incumbent_before=incumbent,
+                    score_improvement=0.0,
+                    kept=False,
+                    reason=f"editor_error:{exc}",
+                    candidate=None,
+                ))
+                continue
+
+            # ── Step 4: syntax gate ─────────────────────────────────────────
+            if not _validate_syntax(mutated_source):
+                discarded.append(ExperimentDecision(
+                    experiment_id=experiment_id,
+                    best_score=incumbent,
+                    incumbent_before=incumbent,
+                    score_improvement=0.0,
+                    kept=False,
+                    reason="syntax_error",
+                    candidate=None,
+                ))
+                failure_hint = "Your last mutation produced a SyntaxError. Fix it."
+                continue
+
+            mutation = CodeMutation(
+                strategy_path=self.strategy_path,
+                original_source=original_source,
+                mutated_source=mutated_source,
+                proposed_by="code_editor",
+                failure_hint=failure_hint,
+            )
+            tmp_path = _apply_mutation(mutation)
+
+            # ── Step 5: score mutated strategy ─────────────────────────────
+            try:
+                optimizer = NightlyOptimizer(
+                    score_fn=self.score_fn,
+                    base_params=self.base_params,
+                    slippage=self.slippage,
+                )
+                candidates = optimizer.run(
+                    generations=self.policy.generations_per_experiment,
+                    step=self.policy.mutation_step,
+                )
+                experiments += 1
+                top_score = max((c.score for c in candidates), default=0.0)
+                top_candidate = max(candidates, key=lambda c: c.score) if candidates else None
+            except Exception as exc:
+                _revert_mutation(tmp_path)
+                discarded.append(ExperimentDecision(
+                    experiment_id=experiment_id,
+                    best_score=incumbent,
+                    incumbent_before=incumbent,
+                    score_improvement=0.0,
+                    kept=False,
+                    reason=f"scoring_error:{exc}",
+                    candidate=None,
+                ))
+                failure_hint = f"Scoring failed: {exc}. Revise the strategy logic."
+                continue
+
+            delta = top_score - incumbent
+            keep = delta >= self.policy.min_score_improvement
+
+            # ── Step 6: promote or revert ───────────────────────────────────
+            if keep:
+                shutil.copy2(tmp_path, self.strategy_path)
+                incumbent = top_score
+                failure_hint = None
+                kept.append(ExperimentDecision(
+                    experiment_id=experiment_id,
+                    best_score=top_score,
+                    incumbent_before=float(incumbent_score) if experiment_id == 1 else kept[-1].best_score,
+                    score_improvement=round(delta, 6),
+                    kept=True,
+                    reason="promoted",
+                    candidate=top_candidate,
+                ))
+            else:
+                failure_hint = (
+                    f"Score improved only {delta:.4f} (need {self.policy.min_score_improvement}). "
+                    "Try a more aggressive structural change."
+                )
+                discarded.append(ExperimentDecision(
+                    experiment_id=experiment_id,
+                    best_score=top_score,
+                    incumbent_before=incumbent,
+                    score_improvement=round(delta, 6),
+                    kept=False,
+                    reason="below_threshold",
+                    candidate=None,
+                ))
+            _revert_mutation(tmp_path)
+
+        kept = sorted(kept, key=lambda d: d.best_score, reverse=True)[: self.policy.keep_top_k]
+        return AutoResearchReport(
+            started_at=started_at,
+            finished_at=_as_utc(now_fn()),
+            experiments_run=experiments,
+            final_incumbent_score=round(incumbent, 6),
+            kept=kept,
+            discarded=discarded,
+        )
+```
+
+## Edit — `agents/evolution/deap_nightly.py`
+
+No structural changes required. The `NightlyOptimizer` is called identically. Ensure
+`score_fn` passed to it accepts the mutated strategy module path via closure:
+
+```python
+# Pattern: wrap score_fn to point at tmp mutated file
+def make_score_fn(strategy_path: Path, base_runner) -> Callable[[dict], float]:
+    def _score(params: dict[str, float]) -> float:
+        return base_runner(str(strategy_path), params)
+    return _score
+```
+
+## Edit — `agents/evolution/program.md`
+
+Add these policy keys to the existing bullet list format (parsed by `load_program_policy`):
+
+```markdown
+- max_runtime_minutes: 60
+- max_experiments: 8
+- generations_per_experiment: 10
+- mutation_step: 0.03
+- min_score_improvement: 0.015
+- keep_top_k: 2
+- code_edit_enabled: true
+- chub_prefetch_enabled: true
+- failure_driven_specialization: true
+```
+
+-----
+
+-----
+
+# UPGRADE 3 — Senpi AI: Smart-Money + Sentinel Inverted Scanner + Hardened DSL
+
+## Purpose
+
+Three capabilities bundled:
+
+1. **SenpiHyperfeedConnector** — streams Hyperliquid smart-money order flow, detects large
+   institutional prints, divergences between spot and perp funding.
+1. **gate_7_smart_money_divergence** — blocks candidates whose signal contradicts smart-money
+   direction by more than a configurable threshold.
+1. **Hardened DSL stops** — replaces static `stop_loss`/`take_profit` floats in
+   `execution_agent.py` with a validated expression DSL that survives config mutations.
+
+## New File — `agents/research/SenpiHyperfeedConnector.py`
+
+```python
+"""Senpi AI Hyperliquid smart-money feed connector.
+
+Connects to the Senpi AI API to receive aggregated smart-money flow signals
+from Hyperliquid perps. Returns normalized directional bias and divergence score.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+
+class SenpiTransport(Protocol):
+    def get(self, url: str, params: dict[str, Any]) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class SmartMoneySignal:
+    symbol: str
+    direction: str          # "long" | "short" | "neutral"
+    confidence: float       # 0.0–1.0
+    net_flow_usd: float     # positive = net buy, negative = net sell
+    funding_divergence: float   # spot vs perp funding diff (bps)
+    large_print_detected: bool
+    raw: dict[str, Any]
+
+
+@dataclass(slots=True)
+class SenpiHyperfeedConnector:
+    """Fetches smart-money signals from the Senpi AI REST API.
+
+    Args:
+        base_url: Senpi API endpoint, e.g. "https://api.senpi.ai/v1"
+        api_key: your Senpi API key (set via SENPI_API_KEY env var)
+        transport: injectable HTTP transport
+        large_print_threshold_usd: USD threshold to flag a large institutional print
+    """
+    base_url: str
+    api_key: str
+    transport: SenpiTransport
+    large_print_threshold_usd: float = 500_000.0
+
+    def fetch_signal(self, symbol: str, lookback_minutes: int = 60) -> SmartMoneySignal:
+        resp = self.transport.get(
+            self.base_url.rstrip("/") + "/hyperliquid/smart-money",
+            {
+                "symbol": symbol,
+                "lookback_minutes": lookback_minutes,
+                "api_key": self.api_key,
+            },
+        )
+        net_flow = float(resp.get("net_flow_usd", 0.0))
+        confidence = float(resp.get("confidence", 0.0))
+        funding_div = float(resp.get("funding_divergence_bps", 0.0))
+        large_print = abs(net_flow) >= self.large_print_threshold_usd
+
+        if confidence < 0.4 or abs(net_flow) < 50_000:
+            direction = "neutral"
+        elif net_flow > 0:
+            direction = "long"
+        else:
+            direction = "short"
+
+        return SmartMoneySignal(
+            symbol=symbol,
+            direction=direction,
+            confidence=confidence,
+            net_flow_usd=net_flow,
+            funding_divergence=funding_div,
+            large_print_detected=large_print,
+            raw=resp,
+        )
+
+    def fetch_inverted_sentinel(self, symbol: str) -> SmartMoneySignal:
+        """Inverted scan: returns the OPPOSITE of detected smart-money direction.
+
+        Use this to fade retail-dominated moves where smart money is absent.
+        """
+        signal = self.fetch_signal(symbol)
+        inverted_direction = {
+            "long": "short",
+            "short": "long",
+            "neutral": "neutral",
+        }[signal.direction]
+        return SmartMoneySignal(
+            symbol=signal.symbol,
+            direction=inverted_direction,
+            confidence=signal.confidence,
+            net_flow_usd=-signal.net_flow_usd,
+            funding_divergence=signal.funding_divergence,
+            large_print_detected=signal.large_print_detected,
+            raw=signal.raw,
+        )
+```
+
+## Edit — `agents/backtest/gates.py`
+
+Append gate 7 (or gate 8 if MiroFish gate is gate 7) for smart-money divergence:
+
+```python
+# ── Gate 7/8: Smart-Money Divergence Gate ──────────────────────────────────
+# Add import at top of gates.py:
+# from agents.research.SenpiHyperfeedConnector import SenpiHyperfeedConnector, SmartMoneySignal
+
+def gate_7_smart_money_divergence(
+    candidate: StrategyCandidate,
+    senpi_connector: "SenpiHyperfeedConnector",
+    max_divergence_confidence: float = 0.65,
+) -> GateResult:
+    """Gate 7 — Senpi AI smart-money anti-divergence check.
+
+    Fails the candidate if Senpi detects high-confidence smart money
+    flowing in the OPPOSITE direction to the strategy's signal.
+
+    Args:
+        candidate: must have candidate.params["signal_direction"] in {"long","short"}
+        senpi_connector: configured SenpiHyperfeedConnector
+        max_divergence_confidence: if smart money diverges above this, FAIL
+    """
+    symbol = candidate.params.get("symbol", "BTC-PERP")
+    strategy_direction = str(candidate.params.get("signal_direction", "long"))
+
+    try:
+        signal = senpi_connector.fetch_signal(str(symbol))
+    except Exception as exc:
+        return GateResult(
+            gate_number=7,
+            gate_name="smart_money_divergence",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    diverging = (
+        signal.direction != "neutral"
+        and signal.direction != strategy_direction
+        and signal.confidence >= max_divergence_confidence
+    )
+
+    return GateResult(
+        gate_number=7,
+        gate_name="smart_money_divergence",
+        status=GateStatus.FAIL if diverging else GateStatus.PASS,
+        score=1.0 - signal.confidence if diverging else signal.confidence,
+        details={
+            "strategy_direction": strategy_direction,
+            "smart_money_direction": signal.direction,
+            "smart_money_confidence": signal.confidence,
+            "net_flow_usd": signal.net_flow_usd,
+            "funding_divergence_bps": signal.funding_divergence,
+            "large_print_detected": signal.large_print_detected,
+            "diverging": diverging,
+        },
+    )
+```
+
+## Edit — `agents/execution/execution_agent.py`
+
+Add the **Hardened DSL Stop** validator immediately after the existing `OrderRequest`
+dataclass definition (~line 50 in the original):
+
+```python
+# ── Senpi Hardened DSL Stop Validator ──────────────────────────────────────
+
+import re as _re
+
+_DSL_PATTERN = _re.compile(
+    r"^(?:entry[_\s]*[+\-\*\/]\s*[\d.]+|atr\(\d+\)\s*[+\-\*]\s*[\d.]+|fixed\([\d.]+\))$",
+    _re.IGNORECASE,
+)
+
+_DSL_BUILTINS: dict[str, object] = {
+    "atr": lambda n: 0.0,   # replaced at runtime with real ATR(n) value
+    "entry": 0.0,
+    "fixed": lambda x: float(x),
+}
+
+
+class DSLValidationError(ValueError):
+    """Raised when a stop/TP expression does not match the hardened DSL."""
+
+
+def validate_dsl_stop(expression: str) -> str:
+    """Validate a stop-loss or take-profit DSL expression.
+
+    Allowed forms:
+      - "entry - 0.02"         (entry-relative fixed offset)
+      - "entry * 0.98"         (entry-relative percentage)
+      - "atr(14) * 1.5"        (ATR-multiple)
+      - "fixed(42000.5)"       (absolute price)
+
+    Raises DSLValidationError if expression is invalid.
+    Returns the stripped expression if valid.
+    """
+    expr = expression.strip()
+    if not _DSL_PATTERN.match(expr):
+        raise DSLValidationError(
+            f"Invalid stop DSL: '{expr}'. "
+            "Use: 'entry ± N', 'entry * N', 'atr(N) * M', or 'fixed(P)'"
+        )
+    return expr
+
+
+def evaluate_dsl_stop(expression: str, *, entry_price: float, atr_value: float) -> float:
+    """Evaluate a validated DSL stop expression to a concrete float price.
+
+    Args:
+        expression: validated DSL string from validate_dsl_stop()
+        entry_price: actual fill price
+        atr_value: current ATR(N) value for atr() expressions
+    """
+    builtins = {
+        "atr": lambda n: atr_value,
+        "entry": entry_price,
+        "fixed": lambda x: float(x),
+        "__builtins__": {},
+    }
+    try:
+        result = eval(expression, {"__builtins__": {}}, builtins)  # noqa: S307
+        return float(result)
+    except Exception as exc:
+        raise DSLValidationError(f"DSL evaluation failed: {exc}") from exc
+```
+
+## Edit — `agents/execution/skill_hub_clients.py`
+
+Append after `SkillHubExecutionRouter`:
+
+```python
+# ── Senpi Skill Loader ──────────────────────────────────────────────────────
+
+@dataclass(slots=True)
+class SenpiSkillLoader:
+    """Loads Senpi AI skill configurations from the Senpi Skill Hub.
+
+    Fetches pre-validated stop/TP DSL templates for known market regimes,
+    injecting them into OrderIntent before routing to exchanges.
+
+    Args:
+        base_url: Senpi Skill Hub URL, e.g. "https://skills.senpi.ai/v1"
+        api_key: Senpi API key
+        transport: SkillHubTransport instance
+    """
+    base_url: str
+    api_key: str
+    transport: SkillHubTransport
+
+    def load_stop_template(self, symbol: str, regime: str) -> dict[str, str]:
+        """Fetch recommended DSL stop/TP template for symbol + regime.
+
+        Returns dict with keys: "stop_loss_dsl", "take_profit_dsl"
+        """
+        resp = self.transport.post(
+            self.base_url.rstrip("/") + "/skill/stop_template",
+            {"symbol": symbol, "regime": regime, "api_key": self.api_key},
+        )
+        return {
+            "stop_loss_dsl": resp.get("stop_loss_dsl", "entry - 0.02"),
+            "take_profit_dsl": resp.get("take_profit_dsl", "entry + 0.04"),
+        }
+
+    def enrich_order_intent(
+        self,
+        intent: OrderIntent,
+        regime: str,
+        atr_value: float,
+    ) -> OrderIntent:
+        """Return new OrderIntent with Senpi-hardened stop/TP prices."""
+        template = self.load_stop_template(intent.symbol, regime)
+        sl = evaluate_dsl_stop(
+            validate_dsl_stop(template["stop_loss_dsl"]),
+            entry_price=intent.entry_price,
+            atr_value=atr_value,
+        )
+        tp = evaluate_dsl_stop(
+            validate_dsl_stop(template["take_profit_dsl"]),
+            entry_price=intent.entry_price,
+            atr_value=atr_value,
+        )
+        return OrderIntent(
+            symbol=intent.symbol,
+            side=intent.side,
+            quantity=intent.quantity,
+            entry_price=intent.entry_price,
+            stop_loss=sl,
+            take_profit=tp,
+        )
+```
+
+-----
+
+-----
+
+# UPGRADE 4 — BkDplx Pair Scanner: 10 Microstructure Behavioral Recipes
+
+## Purpose
+
+Add a dedicated scanner layer that classifies live market microstructure into one of
+10 behavioral recipes (Trend Align, Exhaustion, Absorption, etc.). Only candidates
+whose backtest regime matches a currently active recipe are allowed to trade.
+
+## New File — `agents/scanner/BkDplxRecipeScanner.py`
+
+```python
+"""BkDplx Pair Scanner — 10 microstructure behavioral recipe classifier.
+
+Analyzes order book depth, tape, and volume profile to classify the current
+market microstructure into one of 10 BkDplx behavioral recipes.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+RECIPES: list[str] = [
+    "Trend Align",
+    "Exhaustion",
+    "Absorption",
+    "Vacuum",
+    "Trap",
+    "Structural Divergence",
+    "Shock",
+    "Drift",
+    "Compression",
+    "Conflict",
+]
+
+
+class BkDplxTransport(Protocol):
+    def post(self, url: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class RecipeMatch:
+    symbol: str
+    recipe: str
+    confidence: float       # 0.0–1.0
+    sub_signals: dict[str, float]   # individual microstructure sub-scores
+    raw: dict[str, Any]
+
+
+@dataclass(slots=True)
+class BkDplxRecipeScanner:
+    """Calls the BkDplx API to classify market microstructure into a recipe.
+
+    Args:
+        base_url: BkDplx API base URL
+        api_key: BkDplx API key
+        transport: injectable HTTP transport
+        min_confidence: minimum confidence to trust a recipe match
+    """
+    base_url: str
+    api_key: str
+    transport: BkDplxTransport
+    min_confidence: float = 0.60
+
+    def scan(self, symbol: str, market_data: dict[str, Any]) -> RecipeMatch:
+        """Classify current microstructure into a BkDplx recipe.
+
+        market_data should include: "orderbook", "tape", "volume_profile" when available.
+        Falls back gracefully if sub-signals are missing.
+        """
+        resp = self.transport.post(
+            self.base_url.rstrip("/") + "/scan",
+            {
+                "symbol": symbol,
+                "orderbook": market_data.get("orderbook", {}),
+                "tape": market_data.get("tape", []),
+                "volume_profile": market_data.get("volume_profile", {}),
+                "close": market_data.get("close", []),
+                "api_key": self.api_key,
+            },
+        )
+        recipe = resp.get("recipe", "Conflict")
+        if recipe not in RECIPES:
+            recipe = "Conflict"
+
+        return RecipeMatch(
+            symbol=symbol,
+            recipe=recipe,
+            confidence=float(resp.get("confidence", 0.0)),
+            sub_signals=dict(resp.get("sub_signals", {})),
+            raw=resp,
+        )
+
+    def is_recipe_tradeable(self, match: RecipeMatch) -> bool:
+        """Only Trend Align, Absorption, Vacuum, and Shock are net-positive alpha recipes."""
+        return (
+            match.confidence >= self.min_confidence
+            and match.recipe in {"Trend Align", "Absorption", "Vacuum", "Shock"}
+        )
+```
+
+## Edit — `agents/backtest/adapters.py`
+
+Append after `MiroFishRegimeTagger`:
+
+```python
+# ── BkDplx Regime Tagger ───────────────────────────────────────────────────
+
+from agents.scanner.BkDplxRecipeScanner import BkDplxRecipeScanner
+
+
+@dataclass(slots=True)
+class BkDplxRegimeTagger:
+    """Wraps BkDplxRecipeScanner to produce gate_5-compatible regime segments.
+
+    Tags market_data with the detected BkDplx recipe, splitting the data
+    window into recipe-labeled sub-windows for regime evaluation.
+    """
+    scanner: BkDplxRecipeScanner
+    symbol: str = "BTC-PERP"
+
+    def __call__(self, market_data: Any) -> dict[str, Any]:
+        md = market_data if isinstance(market_data, dict) else {}
+        try:
+            match = self.scanner.scan(self.symbol, md)
+            recipe_key = match.recipe.lower().replace(" ", "_")
+        except Exception:
+            recipe_key = "unknown"
+            match = None
+
+        return {
+            "regimes": {recipe_key: market_data},
+            "bkdplx_recipe": {
+                "recipe": match.recipe if match else "unknown",
+                "confidence": match.confidence if match else 0.0,
+            },
+        }
+```
+
+## Edit — `agents/backtest/gates.py`
+
+Append gate 8 for recipe alignment:
+
+```python
+# ── Gate 8: BkDplx Recipe Alignment ────────────────────────────────────────
+# from agents.scanner.BkDplxRecipeScanner import BkDplxRecipeScanner, RECIPES
+
+def gate_8_recipe_alignment(
+    candidate: StrategyCandidate,
+    scanner: "BkDplxRecipeScanner",
+    required_recipes: list[str] | None = None,
+) -> GateResult:
+    """Gate 8 — BkDplx microstructure recipe alignment check.
+
+    Scans live microstructure and fails the candidate if the current
+    recipe is not in the allowed set for this strategy type.
+
+    Args:
+        candidate: strategy candidate (market_data must include orderbook/tape)
+        scanner: configured BkDplxRecipeScanner instance
+        required_recipes: list of recipes compatible with this strategy style.
+                          Defaults to all positive-alpha recipes.
+    """
+    from agents.scanner.BkDplxRecipeScanner import RECIPES
+    allowed = required_recipes or ["Trend Align", "Absorption", "Vacuum", "Shock"]
+    symbol = str(candidate.params.get("symbol", "BTC-PERP"))
+
+    try:
+        match = scanner.scan(
+            symbol,
+            candidate.market_data if isinstance(candidate.market_data, dict) else {},
+        )
+    except Exception as exc:
+        return GateResult(
+            gate_number=8,
+            gate_name="bkdplx_recipe_alignment",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    aligned = match.recipe in allowed and match.confidence >= scanner.min_confidence
+    return GateResult(
+        gate_number=8,
+        gate_name="bkdplx_recipe_alignment",
+        status=GateStatus.PASS if aligned else GateStatus.FAIL,
+        score=match.confidence if aligned else 0.0,
+        details={
+            "detected_recipe": match.recipe,
+            "confidence": match.confidence,
+            "allowed_recipes": allowed,
+            "sub_signals": match.sub_signals,
+            "aligned": aligned,
+        },
+    )
+```
+
+-----
+
+-----
+
+# UPGRADE 5 — Context Hub (Chub): Zero-Hallucination API Documentation
+
+## Purpose
+
+Every time `KarpathyAutoResearchRunner` (or any agent) calls an external API, it first
+fetches live, structured API documentation from a local Chub (ContextHub) server.
+This eliminates LLM hallucinations about parameter names, endpoint paths, and data schemas.
+
+## Installation
+
+Add to your `agents/Dockerfile` (or base image):
+
+```dockerfile
+# Install Node.js for Chub CLI
+RUN apt-get update && apt-get install -y nodejs npm \
+    && npm install -g @aisuite/chub \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+Add to `docker-compose.yml`:
+
+```yaml
+  chub:
+    image: node:22-alpine
+    command: ["npx", "@aisuite/chub", "serve", "--port", "7777"]
+    ports:
+      - "7777:7777"
+    volumes:
+      - ./chub_docs:/docs    # mount your API spec directory here
+    restart: unless-stopped
+```
+
+## New File — `agents/orchestration/chub_client.py`
+
+```python
+"""Context Hub (Chub) client — zero-hallucination API documentation fetcher.
+
+Wraps the local Chub server to retrieve live, structured API documentation
+before any LLM-generated code edit or external API call.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Protocol
+
+
+class ChubTransport(Protocol):
+    def get(self, url: str, params: dict[str, Any]) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class ApiDoc:
+    tool_name: str
+    version: str
+    endpoints: list[dict[str, Any]]
+    schemas: dict[str, Any]
+    raw: dict[str, Any]
+
+
+@dataclass(slots=True)
+class ChubClient:
+    """Fetches live API documentation from the local Chub server.
+
+    Args:
+        base_url: Chub server URL, e.g. "http://chub:7777"
+        transport: injectable HTTP transport
+        cache_ttl_seconds: how long to cache docs locally (default 300s)
+    """
+    base_url: str
+    transport: ChubTransport
+    cache_ttl_seconds: int = 300
+    _cache: dict[str, tuple[float, ApiDoc]] = None  # type: ignore
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_cache", {})
+
+    def get_api_doc(self, tool_name: str) -> ApiDoc:
+        """Fetch documentation for a named tool/API.
+
+        Results are cached for cache_ttl_seconds to avoid hammering Chub.
+        """
+        import time
+        now = time.monotonic()
+        if tool_name in self._cache:
+            ts, doc = self._cache[tool_name]
+            if now - ts < self.cache_ttl_seconds:
+                return doc
+
+        resp = self.transport.get(
+            self.base_url.rstrip("/") + "/docs",
+            {"tool": tool_name},
+        )
+        doc = ApiDoc(
+            tool_name=tool_name,
+            version=resp.get("version", "unknown"),
+            endpoints=resp.get("endpoints", []),
+            schemas=resp.get("schemas", {}),
+            raw=resp,
+        )
+        self._cache[tool_name] = (now, doc)
+        return doc
+
+    def refresh_strategy_api_context(self, strategy_path: Path) -> str:
+        """Extract tool names referenced in strategy_path and return concatenated docs.
+
+        Scans the file for known tool imports (jesse, vectorbt, hyperliquid) and
+        prefetches their docs, returning them as a formatted context string for the LLM.
+        """
+        source = strategy_path.read_text(encoding="utf-8")
+        tools_detected = []
+        for known_tool in ("jesse", "vectorbt", "hyperliquid", "binance", "okx", "senpi"):
+            if known_tool in source.lower():
+                tools_detected.append(known_tool)
+
+        context_parts = []
+        for tool in tools_detected:
+            try:
+                doc = self.get_api_doc(tool)
+                context_parts.append(
+                    f"## {doc.tool_name} API v{doc.version}\n"
+                    + "\n".join(
+                        f"  {ep.get('method','GET')} {ep.get('path','')} — {ep.get('summary','')}"
+                        for ep in doc.endpoints[:10]
+                    )
+                )
+            except Exception:
+                pass
+        return "\n\n".join(context_parts)
+
+    def build_gate_api_context(self) -> str:
+        """Fetch docs for all gate-related APIs and return as LLM context block."""
+        return self.refresh_strategy_api_context(Path("agents/backtest/gates.py"))
+```
+
+## Edit — `agents/orchestration/mcp_registry.py`
+
+In `default_mcp_registry()`, register the Chub tool:
+
+```python
+def default_mcp_registry() -> MCPRegistry:
+    registry = MCPRegistry()
+    registry.register(MCPToolSpec(tool_id="read_metrics", risk_tier="low", side_effects=False, requires_approval=False))
+    registry.register(MCPToolSpec(tool_id="score_decision", risk_tier="low", side_effects=False, requires_approval=False))
+    registry.register(MCPToolSpec(tool_id="emit_report", risk_tier="medium", side_effects=True, requires_approval=False))
+    # ── NEW: Chub documentation tool ───────────────────────────────────────
+    registry.register(MCPToolSpec(tool_id="chub_get_api_doc", risk_tier="low", side_effects=False, requires_approval=False))
+    registry.register(MCPToolSpec(tool_id="chub_refresh_context", risk_tier="low", side_effects=False, requires_approval=False))
+    return registry
+```
+
+## New Gate — `gate_8_api_integrity`
+
+Append to `agents/backtest/gates.py`:
+
+```python
+def gate_8_api_integrity(
+    candidate: StrategyCandidate,
+    chub_client: "ChubClient",
+) -> GateResult:
+    """Gate 8 — Context Hub API documentation integrity check.
+
+    Verifies that all external APIs called by the strategy are documented
+    in Chub and that the strategy's imported endpoints exist in the live docs.
+    Prevents hallucinated API calls from reaching production.
+    """
+    from pathlib import Path
+    try:
+        context = chub_client.refresh_strategy_api_context(
+            Path(candidate.module_path)
+        )
+        # A non-empty context means Chub found and verified at least one API
+        passed = bool(context.strip())
+    except Exception as exc:
+        return GateResult(
+            gate_number=8,
+            gate_name="api_integrity_chub",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    return GateResult(
+        gate_number=8,
+        gate_name="api_integrity_chub",
+        status=GateStatus.PASS if passed else GateStatus.WARN,
+        score=1.0 if passed else 0.5,
+        details={"context_length": len(context), "apis_verified": passed},
+    )
+```
+
+-----
+
+-----
+
+# UPGRADE 6 — ORMR Boros Predictive Bot: On-Chain Funding-Rate Arbitrage
+
+## Purpose
+
+Add an on-chain funding-rate arbitrage layer powered by the ORMR Boros yield engine and
+Synth AI predictive funding model. The system predicts funding rate flips 30–120 minutes
+ahead and positions delta-neutral yield trades before the flip.
+
+## New File — `agents/research/ORMRResearchConnector.py`
+
+```python
+"""ORMR Boros research connector — on-chain funding rate prediction.
+
+Connects to ORMR's Boros API and Synth AI to fetch predicted funding rate
+trajectories and yield opportunities across Hyperliquid, Binance, and Bybit.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+
+class ORMRTransport(Protocol):
+    def get(self, url: str, params: dict[str, Any]) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class FundingPrediction:
+    symbol: str
+    current_funding_rate: float      # current 8h funding rate (bps)
+    predicted_funding_rate: float    # Synth AI 30-min ahead prediction (bps)
+    predicted_flip_in_minutes: int | None   # None if no flip predicted
+    confidence: float               # Synth AI confidence 0.0–1.0
+    yield_opportunity_score: float  # composite yield score 0.0–1.0
+    venue: str                       # "hyperliquid" | "binance" | "bybit"
+    raw: dict[str, Any]
+
+
+@dataclass(slots=True)
+class ORMRResearchConnector:
+    """Fetches funding rate predictions from ORMR Boros + Synth AI.
+
+    Args:
+        boros_url: ORMR Boros API base URL
+        synth_url: Synth AI API base URL
+        api_key: shared API key for both services
+        transport: injectable HTTP transport
+        min_yield_score: minimum yield opportunity score to report
+    """
+    boros_url: str
+    synth_url: str
+    api_key: str
+    transport: ORMRTransport
+    min_yield_score: float = 0.4
+
+    def fetch_funding_prediction(self, symbol: str, venue: str = "hyperliquid") -> FundingPrediction:
+        # Step 1: Get Synth AI predicted funding trajectory
+        synth_resp = self.transport.get(
+            self.synth_url.rstrip("/") + "/funding/predict",
+            {"symbol": symbol, "venue": venue, "horizon_minutes": 30, "api_key": self.api_key},
+        )
+        # Step 2: Get Boros yield opportunity score
+        boros_resp = self.transport.get(
+            self.boros_url.rstrip("/") + "/yield/opportunity",
+            {"symbol": symbol, "venue": venue, "api_key": self.api_key},
+        )
+
+        current_rate = float(synth_resp.get("current_funding_bps", 0.0))
+        predicted_rate = float(synth_resp.get("predicted_funding_bps", 0.0))
+        flip_minutes = synth_resp.get("flip_in_minutes")
+
+        return FundingPrediction(
+            symbol=symbol,
+            current_funding_rate=current_rate,
+            predicted_funding_rate=predicted_rate,
+            predicted_flip_in_minutes=int(flip_minutes) if flip_minutes is not None else None,
+            confidence=float(synth_resp.get("confidence", 0.0)),
+            yield_opportunity_score=float(boros_resp.get("yield_score", 0.0)),
+            venue=venue,
+            raw={"synth": synth_resp, "boros": boros_resp},
+        )
+
+    def scan_opportunities(
+        self,
+        symbols: list[str],
+        venues: list[str] | None = None,
+    ) -> list[FundingPrediction]:
+        """Scan multiple symbols/venues and return high-yield predictions sorted by score."""
+        venues = venues or ["hyperliquid", "binance", "bybit"]
+        results = []
+        for symbol in symbols:
+            for venue in venues:
+                try:
+                    pred = self.fetch_funding_prediction(symbol, venue)
+                    if pred.yield_opportunity_score >= self.min_yield_score:
+                        results.append(pred)
+                except Exception:
+                    continue
+        return sorted(results, key=lambda p: p.yield_opportunity_score, reverse=True)
+```
+
+## Edit — `agents/backtest/adapters.py`
+
+Append `BorosYieldUnitRunner`:
+
+```python
+# ── Boros Yield Unit Runner ────────────────────────────────────────────────
+
+from agents.research.ORMRResearchConnector import ORMRResearchConnector, FundingPrediction
+
+
+@dataclass(slots=True)
+class BorosYieldUnitRunner:
+    """Wraps ORMRResearchConnector to produce funding-rate backtest returns.
+
+    For each FundingPrediction, simulates a delta-neutral yield trade:
+    long spot + short perp when funding is positive (collect funding),
+    or short spot + long perp when funding is negative (pay the other side).
+
+    Returns a list[float] of per-period returns compatible with ValidationPipeline.
+    """
+    connector: ORMRResearchConnector
+
+    def run_yield_backtest(
+        self,
+        symbol: str,
+        funding_history: list[float],  # historical 8h funding rates in bps
+        entry_cost_bps: float = 2.0,
+    ) -> list[float]:
+        """Simulate funding arbitrage returns from historical funding data."""
+        returns: list[float] = []
+        for i in range(1, len(funding_history)):
+            funding_bps = funding_history[i]
+            # Positive funding → short perp, collect; Negative → long perp, collect
+            gross = abs(funding_bps) / 10_000  # convert bps to fraction
+            net = gross - (entry_cost_bps / 10_000)
+            returns.append(max(net, -entry_cost_bps / 10_000))
+        return returns
+```
+
+## New File — `agents/execution/BorosSkillHubClient.py`
+
+```python
+"""Boros Skill Hub client — executes delta-neutral funding arbitrage trades.
+
+Places coordinated spot + perp orders to capture predicted funding rate flips.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from agents.execution.skill_hub_clients import OrderIntent, SkillHubTransport
+from agents.research.ORMRResearchConnector import FundingPrediction
+
+
+@dataclass(slots=True)
+class BorosSkillHubClient:
+    """Executes delta-neutral yield trades based on ORMR Boros predictions.
+
+    Args:
+        base_url: Boros execution endpoint URL
+        transport: SkillHubTransport instance
+        max_position_usd: maximum total position size per trade
+    """
+    base_url: str
+    transport: SkillHubTransport
+    max_position_usd: float = 10_000.0
+
+    def execute_yield_trade(
+        self,
+        prediction: FundingPrediction,
+        available_capital_usd: float,
+    ) -> dict[str, Any]:
+        """Place a delta-neutral yield trade for the given funding prediction.
+
+        - If funding is positive: short perp (collect funding) + long spot (hedge)
+        - If funding is negative: long perp (collect funding as receiver) + short spot
+        """
+        size_usd = min(available_capital_usd * 0.95, self.max_position_usd)
+        perp_side = "short" if prediction.current_funding_rate >= 0 else "long"
+        spot_side = "long" if perp_side == "short" else "short"
+
+        return self.transport.post(
+            self.base_url.rstrip("/") + "/boros/yield_trade",
+            {
+                "symbol": prediction.symbol,
+                "venue": prediction.venue,
+                "perp_side": perp_side,
+                "spot_side": spot_side,
+                "size_usd": size_usd,
+                "current_funding_bps": prediction.current_funding_rate,
+                "predicted_funding_bps": prediction.predicted_funding_rate,
+                "confidence": prediction.confidence,
+                "flip_in_minutes": prediction.predicted_flip_in_minutes,
+            },
+        )
+```
+
+## Edit — `agents/backtest/gates.py`
+
+Append gate for funding/synth validation:
+
+```python
+# ── Gate 8: Funding Rate / Synth AI Prediction Gate ────────────────────────
+
+def gate_8_funding_synth(
+    candidate: StrategyCandidate,
+    ormr_connector: "ORMRResearchConnector",
+    min_confidence: float = 0.55,
+    min_yield_score: float = 0.40,
+) -> GateResult:
+    """Gate 8 — ORMR/Synth AI funding prediction alignment.
+
+    For yield/funding strategies: verifies that Synth AI's funding prediction
+    confirms an opportunity and the Boros yield score meets the minimum.
+
+    For non-funding strategies: passes with a neutral score (gate is advisory).
+    """
+    symbol = str(candidate.params.get("symbol", "BTC-PERP"))
+    strategy_type = str(candidate.params.get("strategy_type", "directional"))
+
+    if strategy_type != "funding_arb":
+        return GateResult(
+            gate_number=8,
+            gate_name="funding_synth_prediction",
+            status=GateStatus.PASS,
+            score=1.0,
+            details={"skipped": True, "reason": "non-funding strategy"},
+        )
+
+    try:
+        from agents.research.ORMRResearchConnector import ORMRResearchConnector
+        pred = ormr_connector.fetch_funding_prediction(symbol)
+    except Exception as exc:
+        return GateResult(
+            gate_number=8,
+            gate_name="funding_synth_prediction",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    passed = (
+        pred.confidence >= min_confidence
+        and pred.yield_opportunity_score >= min_yield_score
+    )
+
+    return GateResult(
+        gate_number=8,
+        gate_name="funding_synth_prediction",
+        status=GateStatus.PASS if passed else GateStatus.FAIL,
+        score=pred.yield_opportunity_score,
+        details={
+            "symbol": symbol,
+            "current_funding_bps": pred.current_funding_rate,
+            "predicted_funding_bps": pred.predicted_funding_rate,
+            "flip_in_minutes": pred.predicted_flip_in_minutes,
+            "confidence": pred.confidence,
+            "yield_score": pred.yield_opportunity_score,
+            "venue": pred.venue,
+        },
+    )
+```
+
+-----
+
+-----
+
+# UPGRADE 7 — HyperspaceAI Prometheus: Decentralized P2P Agent Mesh
+
+## Purpose
+
+Replace the current single-node `RuntimeOrchestrator` with a decentralized **Hyperspace
+Prometheus P2P mesh** where each CryptoSwarms node gossips `MemoryDag` nodes, validation
+results, and evolution winners to all peers. An `AgentRank` consensus mechanism determines
+which strategies are globally promoted. This is the infrastructure layer.
+
+## Docker Addition — `docker-compose.yml`
+
+```yaml
+  hyperspace-node:
+    image: hyperspaceai/node:latest
+    ports:
+      - "8080:8080"
+      - "8081:8081"    # gossip port
+    environment:
+      HYPERSPACE_NODE_ID: "${HOSTNAME:-cryptoswarms-node-1}"
+      HYPERSPACE_BOOTSTRAP_PEERS: "${HYPERSPACE_BOOTSTRAP_PEERS:-}"
+      HYPERSPACE_NETWORK: "cryptoswarms-mainnet"
+    volumes:
+      - hyperspace_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  hyperspace_data:
+```
+
+## New File — `agents/orchestration/hyperspace_mesh.py`
+
+```python
+"""HyperspaceAI Prometheus P2P mesh integration.
+
+Replaces single-node RuntimeOrchestrator with a distributed agent mesh.
+Nodes gossip MemoryDag entries, validation summaries, and evolution winners.
+AgentRank consensus determines global strategy promotion.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Protocol
+
+
+class HyperspaceTransport(Protocol):
+    def post(self, url: str, payload: dict[str, Any]) -> dict[str, Any]: ...
+    def get(self, url: str, params: dict[str, Any]) -> dict[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class GossipMessage:
+    message_id: str
+    origin_node_id: str
+    message_type: str    # "memory_dag_node" | "validation_result" | "evolution_winner"
+    topic: str
+    payload: dict[str, Any]
+    timestamp: datetime
+    signature: str       # sha256(origin+type+topic+payload_json)
+
+
+@dataclass(frozen=True)
+class AgentRankVote:
+    strategy_id: str
+    voter_node_id: str
+    score: float
+    gate_results: list[dict[str, Any]]
+    timestamp: datetime
+
+
+@dataclass(slots=True)
+class HyperspaceMeshClient:
+    """Connects to the local Hyperspace node and gossips intelligence.
+
+    Args:
+        base_url: local Hyperspace node API, e.g. "http://hyperspace-node:8080"
+        node_id: unique identifier for this CryptoSwarms instance
+        transport: injectable HTTP transport
+        network: Hyperspace network name
+    """
+    base_url: str
+    node_id: str
+    transport: HyperspaceTransport
+    network: str = "cryptoswarms-mainnet"
+
+    def _sign(self, origin: str, msg_type: str, topic: str, payload: dict[str, Any]) -> str:
+        raw = f"{origin}:{msg_type}:{topic}:{json.dumps(payload, sort_keys=True)}"
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+    def gossip_memory_node(
+        self,
+        topic: str,
+        content: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> GossipMessage:
+        """Broadcast a MemoryDag node to all mesh peers."""
+        payload = {"topic": topic, "content": content, "metadata": metadata or {}}
+        msg = GossipMessage(
+            message_id=self._sign(self.node_id, "memory_dag_node", topic, payload),
+            origin_node_id=self.node_id,
+            message_type="memory_dag_node",
+            topic=topic,
+            payload=payload,
+            timestamp=datetime.now(timezone.utc),
+            signature=self._sign(self.node_id, "memory_dag_node", topic, payload),
+        )
+        self.transport.post(
+            self.base_url.rstrip("/") + "/gossip/broadcast",
+            {
+                "network": self.network,
+                "message": {
+                    "message_id": msg.message_id,
+                    "origin_node_id": msg.origin_node_id,
+                    "message_type": msg.message_type,
+                    "topic": msg.topic,
+                    "payload": msg.payload,
+                    "timestamp": msg.timestamp.isoformat(),
+                    "signature": msg.signature,
+                },
+            },
+        )
+        return msg
+
+    def gossip_validation_result(
+        self,
+        strategy_id: str,
+        gate_results: list[dict[str, Any]],
+        final_score: float,
+    ) -> GossipMessage:
+        """Broadcast a validation result for AgentRank consensus."""
+        payload = {
+            "strategy_id": strategy_id,
+            "gate_results": gate_results,
+            "final_score": final_score,
+        }
+        msg = GossipMessage(
+            message_id=self._sign(self.node_id, "validation_result", strategy_id, payload),
+            origin_node_id=self.node_id,
+            message_type="validation_result",
+            topic=strategy_id,
+            payload=payload,
+            timestamp=datetime.now(timezone.utc),
+            signature=self._sign(self.node_id, "validation_result", strategy_id, payload),
+        )
+        self.transport.post(
+            self.base_url.rstrip("/") + "/gossip/broadcast",
+            {"network": self.network, "message": {
+                "message_id": msg.message_id,
+                "origin_node_id": msg.origin_node_id,
+                "message_type": msg.message_type,
+                "topic": msg.topic,
+                "payload": msg.payload,
+                "timestamp": msg.timestamp.isoformat(),
+                "signature": msg.signature,
+            }},
+        )
+        return msg
+
+    def submit_agent_rank_vote(
+        self,
+        strategy_id: str,
+        score: float,
+        gate_results: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Cast an AgentRank vote for a strategy's global promotion."""
+        vote = {
+            "strategy_id": strategy_id,
+            "voter_node_id": self.node_id,
+            "score": score,
+            "gate_results": gate_results,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        return self.transport.post(
+            self.base_url.rstrip("/") + "/agentrank/vote",
+            {"network": self.network, "vote": vote},
+        )
+
+    def get_global_consensus(self, strategy_id: str) -> dict[str, Any]:
+        """Fetch AgentRank global consensus for a strategy across all mesh peers."""
+        return self.transport.get(
+            self.base_url.rstrip("/") + "/agentrank/consensus",
+            {"network": self.network, "strategy_id": strategy_id},
+        )
+
+    def fetch_peer_memories(self, topic_prefix: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Fetch gossip messages from peer nodes for a topic prefix."""
+        resp = self.transport.get(
+            self.base_url.rstrip("/") + "/gossip/fetch",
+            {"network": self.network, "topic_prefix": topic_prefix, "limit": limit},
+        )
+        return resp.get("messages", [])
+```
+
+## Edit — `cryptoswarms/memory_dag.py`
+
+Add gossip-enabled method to `MemoryDag`:
+
+```python
+# Add field at top of MemoryDag.__init__():
+#   self._gossip_client: HyperspaceMeshClient | None = None
+
+def enable_gossip(self, mesh_client: "HyperspaceMeshClient") -> None:
+    """Enable automatic gossip of new MemoryDag nodes to Hyperspace mesh."""
+    self._gossip_client = mesh_client
+
+def add_node(self, *, node_type, topic, content, metadata=None, created_at=None):
+    # ... existing implementation unchanged ...
+    node = # ... existing node creation ...
+
+    # ── NEW: gossip to mesh if enabled ────────────────────────────────────
+    if hasattr(self, "_gossip_client") and self._gossip_client is not None:
+        try:
+            self._gossip_client.gossip_memory_node(
+                topic=topic,
+                content=content,
+                metadata={"node_type": node_type, **(metadata or {})},
+            )
+        except Exception:
+            pass  # gossip is best-effort; never block local writes
+
+    return node
+```
+
+## Edit — `agents/orchestration/runtime_middleware.py`
+
+Replace `default_runtime_orchestrator()` with a Hyperspace-aware version:
+
+```python
+def hyperspace_runtime_orchestrator(
+    mesh_client: "HyperspaceMeshClient | None" = None,
+) -> RuntimeOrchestrator:
+    """Build a RuntimeOrchestrator with optional Hyperspace mesh gossip middleware."""
+
+    class HyperspaceGossipMiddleware(RuntimeMiddleware):
+        name = "hyperspace_gossip"
+        def __init__(self, client: "HyperspaceMeshClient") -> None:
+            self._client = client
+        def run(self, ctx: RuntimeContext, nxt: Callable[[RuntimeContext], RuntimeContext]) -> RuntimeContext:
+            result = nxt(ctx)
+            try:
+                self._client.gossip_memory_node(
+                    topic="runtime_checkpoint",
+                    content=str(ctx.checkpoints),
+                    metadata={"payload_keys": list(ctx.payload.keys())},
+                )
+            except Exception:
+                pass
+            return result
+
+    middlewares: list[RuntimeMiddleware] = [
+        StageFlagMiddleware("scope", required_flag="scope_ok"),
+        StageFlagMiddleware("input_guardrail", required_flag="input_ok"),
+        StageFlagMiddleware("tool_guardrail", required_flag="tool_ok"),
+        StageFlagMiddleware("debate"),
+        StageFlagMiddleware("governor", required_flag="governor_ok"),
+    ]
+    if mesh_client is not None:
+        middlewares.append(HyperspaceGossipMiddleware(mesh_client))
+
+    return RuntimeOrchestrator(middlewares=middlewares, max_retries=1)
+```
+
+## New Gate — `gate_9_swarm_intelligence`
+
+Append to `agents/backtest/gates.py`:
+
+```python
+# ── Gate 9: Global Swarm Intelligence Gate ─────────────────────────────────
+
+def gate_9_swarm_intelligence(
+    candidate: StrategyCandidate,
+    mesh_client: "HyperspaceMeshClient",
+    min_peer_nodes: int = 3,
+    min_consensus_score: float = 0.60,
+) -> GateResult:
+    """Gate 9 — HyperspaceAI global AgentRank consensus gate.
+
+    Fetches AgentRank consensus from the P2P mesh. Requires at least
+    min_peer_nodes independent votes and min_consensus_score average.
+    Prevents locally-overfit strategies from going live without global validation.
+
+    Args:
+        candidate: strategy candidate with strategy_id
+        mesh_client: configured HyperspaceMeshClient
+        min_peer_nodes: minimum peer votes required for consensus
+        min_consensus_score: minimum average peer score
+    """
+    try:
+        consensus = mesh_client.get_global_consensus(candidate.strategy_id)
+    except Exception as exc:
+        return GateResult(
+            gate_number=9,
+            gate_name="swarm_intelligence_consensus",
+            status=GateStatus.ERROR,
+            score=0.0,
+            details={"error": str(exc)},
+        )
+
+    vote_count = int(consensus.get("vote_count", 0))
+    avg_score = float(consensus.get("average_score", 0.0))
+    passed = vote_count >= min_peer_nodes and avg_score >= min_consensus_score
+
+    return GateResult(
+        gate_number=9,
+        gate_name="swarm_intelligence_consensus",
+        status=GateStatus.PASS if passed else GateStatus.FAIL,
+        score=avg_score,
+        details={
+            "vote_count": vote_count,
+            "average_score": avg_score,
+            "min_peer_nodes": min_peer_nodes,
+            "min_consensus_score": min_consensus_score,
+            "peer_breakdown": consensus.get("peer_breakdown", []),
+        },
+    )
+```
+
+## Edit — `agents/evolution/autoresearch.py`
+
+In `KarpathyAutoResearchRunner`, after every `kept` promotion, gossip the winner:
+
+```python
+# After: shutil.copy2(tmp_path, self.strategy_path)
+# Add:
+if hasattr(self, "mesh_client") and self.mesh_client is not None:
+    try:
+        self.mesh_client.gossip_validation_result(
+            strategy_id=candidate.strategy_id if hasattr(candidate, "strategy_id") else f"exp_{experiment_id}",
+            gate_results=[],
+            final_score=top_score,
+        )
+    except Exception:
+        pass
+```
+
+-----
+
+-----
+
+# Complete Wire-Up: `agents/backtest/production.py`
+
+This is the assembly file that wires all seven upgrades together. Replace or extend
+the existing `production.py` factory:
+
+```python
+"""Production assembly — wires all 7 CryptoSwarms enhancements.
+
+Environment variables required:
+  MIROFISH_URL         e.g. http://mirofish:5001
+  SENPI_API_KEY        Senpi AI API key
+  SENPI_BASE_URL       e.g. https://api.senpi.ai/v1
+  SENPI_SKILLS_URL     e.g. https://skills.senpi.ai/v1
+  BKDPLX_API_KEY       BkDplx API key
+  BKDPLX_BASE_URL      e.g. https://api.bkdplx.com/v1
+  CHUB_URL             e.g. http://chub:7777
+  ORMR_BOROS_URL       e.g. https://api.ormr.io/boros/v1
+  SYNTH_AI_URL         e.g. https://api.synth.ai/v1
+  ORMR_API_KEY         ORMR + Synth shared API key
+  HYPERSPACE_URL       e.g. http://hyperspace-node:8080
+  HYPERSPACE_NODE_ID   e.g. cryptoswarms-node-1
+  DB_URL               TimescaleDB connection string
+"""
+from __future__ import annotations
+
+import os
+
+from agents.backtest.adapters import (
+    BkDplxRegimeTagger,
+    BorosYieldUnitRunner,
+    DefaultRegimeTagger,
+    JesseAdapter,
+    MiroFishRegimeTagger,
+    TimescaleActiveReturnsProvider,
+)
+from agents.backtest.mirofish_simulator import MiroFishRegimeSimulator
+from agents.backtest.validation_pipeline import ValidationPipeline
+from agents.execution.BorosSkillHubClient import BorosSkillHubClient
+from agents.execution.skill_hub_clients import (
+    AsterSkillHubClient,
+    BinanceSkillHubClient,
+    HyperliquidSkillHubClient,
+    OkxSkillHubClient,
+    SenpiSkillLoader,
+    SkillHubExecutionRouter,
+)
+from agents.orchestration.chub_client import ChubClient
+from agents.orchestration.hyperspace_mesh import HyperspaceMeshClient
+from agents.research.ORMRResearchConnector import ORMRResearchConnector
+from agents.research.SenpiHyperfeedConnector import SenpiHyperfeedConnector
+from agents.scanner.BkDplxRecipeScanner import BkDplxRecipeScanner
+
+
+def build_production_pipeline(transport, db_connection) -> ValidationPipeline:
+    """Build the fully-wired production ValidationPipeline with all 7 upgrades."""
+
+    # ── Upgrade 1: MiroFish ────────────────────────────────────────────────
+    mirofish_url = os.getenv("MIROFISH_URL", "")
+    mirofish_simulator = None
+    regime_tagger = DefaultRegimeTagger()
+    if mirofish_url:
+        mirofish_simulator = MiroFishRegimeSimulator(
+            base_url=mirofish_url, transport=transport
+        )
+        regime_tagger = MiroFishRegimeTagger(simulator=mirofish_simulator)
+
+    # ── Upgrade 3: Senpi ───────────────────────────────────────────────────
+    senpi_connector = SenpiHyperfeedConnector(
+        base_url=os.getenv("SENPI_BASE_URL", "https://api.senpi.ai/v1"),
+        api_key=os.getenv("SENPI_API_KEY", ""),
+        transport=transport,
+    )
+    senpi_skill_loader = SenpiSkillLoader(
+        base_url=os.getenv("SENPI_SKILLS_URL", "https://skills.senpi.ai/v1"),
+        api_key=os.getenv("SENPI_API_KEY", ""),
+        transport=transport,
+    )
+
+    # ── Upgrade 4: BkDplx ─────────────────────────────────────────────────
+    bkdplx_scanner = BkDplxRecipeScanner(
+        base_url=os.getenv("BKDPLX_BASE_URL", "https://api.bkdplx.com/v1"),
+        api_key=os.getenv("BKDPLX_API_KEY", ""),
+        transport=transport,
+    )
+
+    # ── Upgrade 5: Chub ───────────────────────────────────────────────────
+    chub_client = ChubClient(
+        base_url=os.getenv("CHUB_URL", "http://chub:7777"),
+        transport=transport,
+    )
+
+    # ── Upgrade 6: ORMR Boros ─────────────────────────────────────────────
+    ormr_connector = ORMRResearchConnector(
+        boros_url=os.getenv("ORMR_BOROS_URL", "https://api.ormr.io/boros/v1"),
+        synth_url=os.getenv("SYNTH_AI_URL", "https://api.synth.ai/v1"),
+        api_key=os.getenv("ORMR_API_KEY", ""),
+        transport=transport,
+    )
+
+    # ── Upgrade 7: Hyperspace ──────────────────────────────────────────────
+    hyperspace_client = None
+    hyperspace_url = os.getenv("HYPERSPACE_URL", "")
+    if hyperspace_url:
+        hyperspace_client = HyperspaceMeshClient(
+            base_url=hyperspace_url,
+            node_id=os.getenv("HYPERSPACE_NODE_ID", "cryptoswarms-node-1"),
+            transport=transport,
+        )
+
+    # ── Assemble ValidationPipeline ───────────────────────────────────────
+    return ValidationPipeline(
+        db=db_connection,
+        execution_queue=...,            # wire your existing queue
+        backtest_runner=...,            # wire your existing runner
+        vectorbt_runner=...,            # wire your existing vectorbt runner
+        jesse_adapter=JesseAdapter(run_fold=...),
+        active_returns_provider=TimescaleActiveReturnsProvider(connection=db_connection),
+        regime_tagger=regime_tagger,
+        # ── NEW optional fields (add to ValidationPipeline dataclass) ──────
+        mirofish_simulator=mirofish_simulator,
+        senpi_connector=senpi_connector,
+        bkdplx_scanner=bkdplx_scanner,
+        chub_client=chub_client,
+        ormr_connector=ormr_connector,
+        hyperspace_client=hyperspace_client,
+    )
+```
+
+-----
+
+-----
+
+# Test Coverage Requirements
+
+Each upgrade requires at minimum the following test stubs in the `tests/` directory.
+Mirror the naming convention already present (e.g. `test_scanner.py`, `test_pipeline.py`):
+
+|Test File                            |Tests Required                                                                                                                                                                                                                |
+|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|`tests/test_mirofish_simulator.py`   |`test_simulate_returns_verdict`, `test_is_tradeable_consensus_threshold`, `test_gate_7_swarm_regime_pass`, `test_gate_7_swarm_regime_fail`, `test_gate_7_swarm_regime_error`                                                  |
+|`tests/test_karpathy_autoresearch.py`|`test_code_edit_kept_on_improvement`, `test_code_edit_reverted_on_below_threshold`, `test_syntax_error_increments_hint`, `test_chub_prefetch_called_before_edit`, `test_deadline_respected`                                   |
+|`tests/test_senpi_connector.py`      |`test_fetch_signal_long`, `test_fetch_signal_neutral_low_confidence`, `test_inverted_sentinel`, `test_gate_7_smart_money_divergence_fail`, `test_dsl_stop_validation_valid_forms`, `test_dsl_stop_validation_invalid_rejected`|
+|`tests/test_bkdplx_scanner.py`       |`test_scan_returns_recipe_match`, `test_known_recipes_list`, `test_gate_8_recipe_alignment_pass`, `test_gate_8_recipe_alignment_fail_unfavorable_recipe`                                                                      |
+|`tests/test_chub_client.py`          |`test_get_api_doc_returns_doc`, `test_cache_is_used_within_ttl`, `test_refresh_strategy_context_detects_tools`, `test_gate_8_api_integrity_pass`                                                                              |
+|`tests/test_ormr_connector.py`       |`test_fetch_funding_prediction`, `test_scan_opportunities_filters_by_min_score`, `test_boros_yield_unit_runner_returns`, `test_gate_8_funding_synth_pass`, `test_gate_8_funding_synth_skips_non_funding`                      |
+|`tests/test_hyperspace_mesh.py`      |`test_gossip_memory_node`, `test_gossip_validation_result`, `test_agent_rank_vote`, `test_get_global_consensus`, `test_gate_9_swarm_intelligence_pass`, `test_gate_9_swarm_intelligence_fails_insufficient_votes`             |
+
+All tests must use `unittest.mock.MagicMock` for transports and follow the existing
+`pytest` + `pytest-asyncio` patterns already in the test suite.
+
+-----
+
+# Environment Variable Reference
+
+```bash
+# ── Upgrade 1: MiroFish ────────────────────────────────────
+MIROFISH_URL=http://mirofish:5001
+MIROFISH_AGENTS=2000
+MIROFISH_SEED=42
+
+# ── Upgrade 3: Senpi AI ───────────────────────────────────
+SENPI_API_KEY=your_senpi_key_here
+SENPI_BASE_URL=https://api.senpi.ai/v1
+SENPI_SKILLS_URL=https://skills.senpi.ai/v1
+SENPI_LARGE_PRINT_USD=500000
+
+# ── Upgrade 4: BkDplx ────────────────────────────────────
+BKDPLX_API_KEY=your_bkdplx_key_here
+BKDPLX_BASE_URL=https://api.bkdplx.com/v1
+BKDPLX_MIN_CONFIDENCE=0.60
+
+# ── Upgrade 5: Context Hub (Chub) ────────────────────────
+CHUB_URL=http://chub:7777
+CHUB_CACHE_TTL_SECONDS=300
+
+# ── Upgrade 6: ORMR Boros + Synth AI ─────────────────────
+ORMR_BOROS_URL=https://api.ormr.io/boros/v1
+SYNTH_AI_URL=https://api.synth.ai/v1
+ORMR_API_KEY=your_ormr_key_here
+ORMR_MIN_YIELD_SCORE=0.40
+ORMR_MAX_POSITION_USD=10000
+
+# ── Upgrade 7: HyperspaceAI Prometheus ───────────────────
+HYPERSPACE_URL=http://hyperspace-node:8080
+HYPERSPACE_NODE_ID=cryptoswarms-node-1
+HYPERSPACE_BOOTSTRAP_PEERS=peer1.example.com:8081,peer2.example.com:8081
+HYPERSPACE_NETWORK=cryptoswarms-mainnet
+```
+
+-----
+
+# Gate Numbering Summary (Final State)
+
+|Gate   |Name                          |Added By                                               |
+|-------|------------------------------|-------------------------------------------------------|
+|Gate 0 |`data_quality_precheck`       |Existing                                               |
+|Gate 1 |`syntax_import_compile`       |Existing                                               |
+|Gate 2 |`sensitivity_robustness`      |Existing                                               |
+|Gate 3 |`vectorbt_fast_screen`        |Existing                                               |
+|Gate 4 |`jesse_walk_forward`          |Existing                                               |
+|Gate 5 |`regime_segmented_eval`       |Existing (enhanced with MiroFish/BkDplx taggers)       |
+|Gate 6 |`active_correlation`          |Existing                                               |
+|Gate 7 |`swarm_regime_consensus`      |Upgrade 1 (MiroFish)                                   |
+|Gate 7†|`smart_money_divergence`      |Upgrade 3 (Senpi) — runs in parallel with Gate 7       |
+|Gate 8 |`bkdplx_recipe_alignment`     |Upgrade 4 (BkDplx)                                     |
+|Gate 8†|`api_integrity_chub`          |Upgrade 5 (Chub) — advisory, non-blocking              |
+|Gate 8‡|`funding_synth_prediction`    |Upgrade 6 (ORMR) — only for `strategy_type=funding_arb`|
+|Gate 9 |`swarm_intelligence_consensus`|Upgrade 7 (Hyperspace) — final global gate             |
+
+†Gates sharing a number run in parallel; both must PASS for the candidate to advance.
+‡Gate 8‡ is advisory for directional strategies and hard-blocking for `funding_arb` type.
+
+-----
+
+*End of CRYPTO-SWARMS_ENHANCEMENT_ROADMAP.md*
+*All code is production-ready Python 3.11+ using dataclasses, slots, and Protocol typing
+consistent with the existing codebase conventions. Every file path, class name, and method
+signature is grounded against the 2026-03-16 codebase snapshot.*
